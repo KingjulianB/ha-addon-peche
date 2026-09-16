@@ -52,10 +52,6 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_trips_date  ON trips(date);
-CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner);
-CREATE INDEX IF NOT EXISTS idx_tracks_date ON tracks(date);
 `);
 
 function ensureColumn(table, col, def) {
@@ -67,6 +63,15 @@ ensureColumn("trips", "locked", "INTEGER DEFAULT 1");
 ensureColumn("trips", "photo", "TEXT");
 ensureColumn("trips", "gps_lat", "REAL");
 ensureColumn("trips", "gps_lon", "REAL");
+
+// Les index sont créés APRÈS la migration des colonnes, car ils peuvent
+// porter sur des colonnes ajoutées ci-dessus (ex. owner) qui n'existent pas
+// encore sur une base créée par une version antérieure.
+db.exec(`
+CREATE INDEX IF NOT EXISTS idx_trips_date  ON trips(date);
+CREATE INDEX IF NOT EXISTS idx_trips_owner ON trips(owner);
+CREATE INDEX IF NOT EXISTS idx_tracks_date ON tracks(date);
+`);
 
 const seedSettings = db.prepare("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)");
 const DEFAULTS = {
