@@ -44,7 +44,11 @@ function parseCookies(req) {
   return out;
 }
 function currentUser(req) {
-  const token = parseCookies(req).session;
+  // Token via cookie OU via en-tête Authorization: Bearer <token>
+  // (le second marche même si le cookie ne traverse pas le proxy Cloudflare).
+  let token = parseCookies(req).session;
+  const auth = req.get("authorization") || "";
+  if (!token && auth.startsWith("Bearer ")) token = auth.slice(7);
   return getSession(token);
 }
 function requireAuth(req, res, next) {
@@ -72,7 +76,9 @@ app.post("/api/login", (req, res) => {
     ? `session=${token}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=2592000`
     : `session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000`;
   res.setHeader("Set-Cookie", cookie);
-  res.json({ username: user.username, role: user.role });
+  // On renvoie aussi le token : le front le stockera et l'enverra en en-tête
+  // Authorization, ce qui fonctionne même si le cookie ne passe pas le proxy.
+  res.json({ username: user.username, role: user.role, token });
 });
 
 app.post("/api/logout", (req, res) => {
@@ -154,7 +160,15 @@ app.delete("/api/trips/:id", requireAuth, requireAdmin, (req, res) => {
 
 // Sert une photo. La référence passe en paramètre de requête (?ref=...) car
 // une référence Nextcloud contient des "/" qui posent problème dans un chemin.
-app.get("/api/photo", requireAuth, async (req, res) => {
+app.get("/api/photo", async (req, res) => {
+  // Auth spéciale : une balise <img> ne peut pas envoyer d'en-tête,
+  // donc on accepte le token en query (?t=) en plus du cookie/header.
+  let token = parseCookies(req).session;
+  const auth = req.get("authorization") || "";
+  if (!token && auth.startsWith("Bearer ")) token = auth.slice(7);
+  if (!token && req.query.t) token = String(req.query.t);
+  if (!getSession(token)) return res.status(401).end();
+
   const ref = String(req.query.ref || "");
   if (ref.startsWith("nc:")) {
     try {
