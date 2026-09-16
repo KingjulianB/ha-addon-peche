@@ -1,5 +1,5 @@
 name: Pêche Port-Gentil
-version: "1.2.0"
+version: "1.2.1"
 slug: peche
 description: Journal de bord & suivi VMS pour la pêche artisanale (compatible NEMO)
 url: https://github.com/KingjulianB/ha-addon-peche
