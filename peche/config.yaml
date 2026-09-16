@@ -1,22 +1,16 @@
 name: Pêche Port-Gentil
-version: "1.0.0"
+version: "1.0.1"
 slug: peche
 description: Journal de bord & suivi VMS pour la pêche artisanale (compatible NEMO)
-url: https://github.com/VOTRE-PSEUDO/ha-addon-peche
-# Architectures supportées (couvre Raspberry Pi, mini-PC/NUC, NAS)
+url: https://github.com/KingjulianB/ha-addon-peche
 arch:
   - aarch64
   - amd64
   - armv7
-# Port exposé : l'appli écoute sur 3000 dans le conteneur, publié sur l'hôte.
-# C'est ce port que votre tunnel Cloudflare pointera.
 ports:
   3000/tcp: 3000
 ports_description:
   3000/tcp: Interface web de l'application pêche
-# Les données (base SQLite) sont stockées dans /data, persistant par HA.
-map:
-  - addon_config:rw
 options:
   app_password: changez-moi
   nemo_api_url: ""
@@ -27,6 +21,5 @@ schema:
   nemo_api_url: str?
   nemo_api_key: str?
   nemo_device_id: str?
-# Pas besoin d'accès à l'API HA : l'appli est autonome.
 hassio_api: false
 homeassistant_api: false
