@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal de bord — Pêche Port-Gentil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,380;9..144,460;9..144,560&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ---------- Écran de connexion ---------- -->
+<div id="login" class="login">
+  <div class="login-card">
+    <div class="mark">◦</div>
+    <h1 class="fr">Journal de bord</h1>
+    <p class="sub">Pêche artisanale · Port-Gentil</p>
+    <label for="usr">Identifiant</label>
+    <input id="usr" type="text" autocomplete="username" placeholder="admin ou pecheur">
+    <label for="pw">Mot de passe</label>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="••••••">
+    <button id="loginBtn">Entrer</button>
+    <p id="loginErr" class="err" hidden></p>
+  </div>
+</div>
+
+<!-- ---------- Application ---------- -->
+<div id="app" hidden>
+  <div class="shell">
+    <header class="head">
+      <div class="head-l">
+        <span class="mark fr">◦</span>
+        <div>
+          <h1 class="fr" id="hTitle">Journal de bord</h1>
+          <p class="muted" id="hBoat">Pirogue · Port‑Gentil</p>
+        </div>
+      </div>
+      <div class="head-r">
+        <div class="muted num" id="hWeek"></div>
+        <div class="nemo" id="hNemo"><span class="dot"></span><span id="nemoTxt">NEMO —</span></div>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="journal">Journal</button>
+      <button class="tab" data-tab="carte">Carte &amp; carburant</button>
+      <button class="tab" data-tab="controle">Contrôle</button>
+      <button class="tab" data-tab="saisie">Nouvelle sortie</button>
+      <button class="tab" data-tab="reglages">Réglages</button>
+    </nav>
+
+    <main id="view"></main>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/map.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
