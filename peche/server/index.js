@@ -16,6 +16,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Derrière le tunnel Cloudflare / proxy HA : faire confiance aux en-têtes
+// X-Forwarded-* pour détecter le HTTPS et fixer le cookie correctement.
+app.set("trust proxy", true);
+
 // Dossier des photos (dans /data pour être persistant + sauvegardé par HA)
 const DB_PATH = process.env.DB_PATH || "./data/peche.db";
 const PHOTO_DIR = join(dirname(DB_PATH), "photos");
@@ -61,7 +65,13 @@ app.post("/api/login", (req, res) => {
     return res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
   }
   const token = createSession(user);
-  res.setHeader("Set-Cookie", `session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000`);
+  // Cookie sécurisé si on est en HTTPS (via Cloudflare), sinon cookie simple
+  // pour que l'accès local http://IP:3000 continue de fonctionner.
+  const https = req.secure || req.get("x-forwarded-proto") === "https";
+  const cookie = https
+    ? `session=${token}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=2592000`
+    : `session=${token}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000`;
+  res.setHeader("Set-Cookie", cookie);
   res.json({ username: user.username, role: user.role });
 });
 
