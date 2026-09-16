@@ -13,7 +13,8 @@ RUN npm install --omit=dev
 # Code de l'application
 COPY server ./server
 COPY public ./public
-COPY run.sh /run.sh
-RUN chmod a+x /run.sh
 
-CMD [ "/run.sh" ]
+# Script de démarrage s6 : l'image de base HA l'exécute automatiquement.
+# Il doit être dans /etc/services.d/<nom>/run — PAS de CMD (géré par s6-overlay).
+COPY run.sh /etc/services.d/peche/run
+RUN chmod a+x /etc/services.d/peche/run
