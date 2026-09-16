@@ -1,7 +1,12 @@
-// Client API — authentification par cookie de session (géré par le navigateur).
+// Client API — authentification par jeton (en-tête Authorization) ET cookie.
+// Le jeton en en-tête garantit le fonctionnement même derrière un proxy
+// (Cloudflare) où le cookie pourrait ne pas être conservé.
 const API = (() => {
+  let token = sessionStorage.getItem("token") || "";
+
   async function req(method, path, body) {
     const opt = { method, credentials: "same-origin", headers: {} };
+    if (token) opt.headers["Authorization"] = "Bearer " + token;
     if (body !== undefined) {
       opt.headers["Content-Type"] = "application/json";
       opt.body = JSON.stringify(body);
@@ -17,8 +22,16 @@ const API = (() => {
   }
 
   return {
-    login: (username, password) => req("POST", "/api/login", { username, password }),
-    logout: () => req("POST", "/api/logout"),
+    async login(username, password) {
+      const r = await req("POST", "/api/login", { username, password });
+      if (r && r.token) { token = r.token; sessionStorage.setItem("token", token); }
+      return r;
+    },
+    async logout() {
+      try { await req("POST", "/api/logout"); } finally {
+        token = ""; sessionStorage.removeItem("token");
+      }
+    },
     me: () => req("GET", "/api/me"),
 
     trips: () => req("GET", "/api/trips"),
@@ -36,5 +49,9 @@ const API = (() => {
 
     nemoStatus: () => req("GET", "/api/nemo/status"),
     nemoSync: (r) => req("POST", "/api/nemo/sync", r),
+
+    // Pour les images : on ne peut pas mettre d'en-tête sur une balise <img>,
+    // donc on expose le token en query pour l'URL des photos.
+    photoUrl: (ref) => `/api/photo?ref=${encodeURIComponent(ref)}${token ? "&t=" + encodeURIComponent(token) : ""}`,
   };
 })();
