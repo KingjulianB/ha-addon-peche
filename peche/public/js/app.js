@@ -3,7 +3,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const el = (id) => document.getElementById(id);
 
-  let state = { trips: [], tracks: [], settings: {}, curTrack: null, openId: null, nemo: false, user: null, expenses: [], pannes: [] };
+  let state = { trips: [], tracks: [], settings: {}, curTrack: null, openId: null, nemo: false, fishId: false, user: null, expenses: [], pannes: [] };
   const isAdmin = () => state.user && state.user.role === "admin";
 
   // --- Thème clair / sombre ---
@@ -114,6 +114,69 @@
   // --- Bascule login / rejoindre (pêcheur) ---
   el("goJoin").addEventListener("click", () => { el("login").hidden = true; el("join").hidden = false; });
   el("joinToLogin").addEventListener("click", () => { el("join").hidden = true; el("login").hidden = false; });
+  // --- Bascule login / mot de passe oublié ---
+  el("goForgot").addEventListener("click", () => { el("login").hidden = true; el("forgot").hidden = false; });
+  el("forgotToLogin").addEventListener("click", () => { el("forgot").hidden = true; el("login").hidden = false; });
+
+  async function doForgot() {
+    const email = el("f-email").value.trim();
+    const btn = el("forgotBtn"); const errBox = el("forgotErr"); const okBox = el("forgotOk");
+    errBox.hidden = true; okBox.hidden = true;
+    if (!email) { errBox.hidden = false; errBox.textContent = "Votre email est requis."; return; }
+    btn.disabled = true; btn.textContent = "Envoi…";
+    try {
+      const r = await API.forgotPassword(email);
+      okBox.hidden = false;
+      if (r.lien_reinitialisation) {
+        // Mode sans SMTP : on donne le lien directement
+        okBox.innerHTML = `Réinitialisation (envoi email non configuré) — ouvrez ce lien pour choisir un nouveau mot de passe :<br><a href="${esc(r.lien_reinitialisation)}" style="color:var(--lagoon);word-break:break-all">${esc(r.lien_reinitialisation)}</a>`;
+      } else {
+        okBox.textContent = "Si un compte existe avec cet email, un lien de réinitialisation vient d'être envoyé.";
+      }
+      btn.textContent = "Envoyer le lien"; btn.disabled = false;
+    } catch (e) {
+      errBox.hidden = false; errBox.textContent = e.message;
+      btn.disabled = false; btn.textContent = "Envoyer le lien";
+    }
+  }
+  el("forgotBtn").addEventListener("click", doForgot);
+  el("f-email").addEventListener("keydown", (e) => { if (e.key === "Enter") doForgot(); });
+
+  // --- Choix du nouveau mot de passe (arrivée via /reset-password?token=...) ---
+  let resetToken = "";
+  async function doResetPassword() {
+    const pw = el("rp-pw").value;
+    const btn = el("resetpwBtn"); const errBox = el("resetpwErr"); const okBox = el("resetpwOk");
+    errBox.hidden = true; okBox.hidden = true;
+    if (pw.length < 6) { errBox.hidden = false; errBox.textContent = "6 caractères minimum."; return; }
+    btn.disabled = true; btn.textContent = "Validation…";
+    try {
+      await API.resetPassword(resetToken, pw);
+      okBox.hidden = false;
+      okBox.textContent = "Mot de passe modifié ✓ Vous pouvez maintenant vous connecter.";
+      btn.hidden = true; el("rp-pw").hidden = true;
+      setTimeout(() => {
+        el("resetpw").hidden = true; el("login").hidden = false;
+        btn.hidden = false; el("rp-pw").hidden = false; el("rp-pw").value = "";
+        btn.textContent = "Valider"; btn.disabled = false;
+      }, 2500);
+    } catch (e) {
+      errBox.hidden = false; errBox.textContent = e.message;
+      btn.disabled = false; btn.textContent = "Valider";
+    }
+  }
+  el("resetpwBtn").addEventListener("click", doResetPassword);
+  el("rp-pw").addEventListener("keydown", (e) => { if (e.key === "Enter") doResetPassword(); });
+
+  // --- Lien de réinitialisation reçu par email (/reset-password?token=...) ---
+  (function handleResetLink() {
+    if (location.pathname !== "/reset-password") return;
+    const params = new URLSearchParams(location.search);
+    resetToken = params.get("token") || "";
+    history.replaceState({}, "", location.pathname);
+    if (!resetToken) return;
+    el("login").hidden = true; el("resetpw").hidden = false;
+  })();
 
   async function doJoin() {
     const code = el("j-code").value.trim().toUpperCase();
@@ -187,10 +250,11 @@
   // d'erreur réseau (on affiche l'appli quand même et on réessaiera).
   async function boot(fromLogin) {
     try {
-      const [trips, tracks, settings, nemo] = await Promise.all([
+      const [trips, tracks, settings, nemo, fishId] = await Promise.all([
         API.trips(), API.tracks(), API.settings(), API.nemoStatus().catch(() => ({ configured: false })),
+        API.identifyPhotoStatus().catch(() => ({ configured: false })),
       ]);
-      state.trips = trips; state.tracks = tracks; state.settings = settings; state.nemo = nemo.configured;
+      state.trips = trips; state.tracks = tracks; state.settings = settings; state.nemo = nemo.configured; state.fishId = fishId.configured;
       if (tracks[0]) state.curTrack = await API.track(tracks[0].id);
       applyRoleUI();
       renderHead();
@@ -1099,11 +1163,13 @@
         · ${e.nb_sorties || 0} sortie(s)
         · créée le ${frDate((e.created_at ? new Date(e.created_at).toISOString().slice(0,10) : ""))}
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
         ${!verifie ? `<button class="btn ghost small" data-verifier="${e.id}">Vérifier le compte</button>` : ""}
-        ${suspendu
-          ? `<button class="btn ghost small" data-activer="${e.id}">Réactiver</button>`
-          : `<button class="btn ghost small" data-suspend="${e.id}" style="color:var(--signal);border-color:var(--signal)">Suspendre</button>`}
+        ${e.admin_superadmin
+          ? '<span class="muted" style="font-size:12px">Compte administrateur principal — ne peut pas être suspendu</span>'
+          : (suspendu
+            ? `<button class="btn ghost small" data-activer="${e.id}">Réactiver</button>`
+            : `<button class="btn ghost small" data-suspend="${e.id}" style="color:var(--signal);border-color:var(--signal)">Suspendre</button>`)}
       </div>
     </div>`;
   }
@@ -1223,6 +1289,9 @@
         <label>Photo des poissons (obligatoire)</label>
         <input type="file" id="s-photo" accept="image/*" capture="environment" style="padding:0;border:none;background:none">
         <div id="s-photo-preview" style="margin-top:10px"></div>
+        ${state.fishId ? `
+        <button class="btn ghost small" id="s-identify-btn" style="margin-top:8px" disabled>Identifier l'espèce automatiquement (bêta)</button>
+        <div id="s-identify-result" style="margin-top:8px"></div>` : ""}
 
         <label style="margin-top:16px">Position GPS du téléphone</label>
         <div id="s-gps" class="info-badge" style="margin-top:0">Position non capturée.</div>
@@ -1261,8 +1330,11 @@
       compressImage(f, (dataUrl) => {
         pendingPhoto = dataUrl;
         el("s-photo-preview").innerHTML = `<img src="${dataUrl}" alt="aperçu" style="max-width:180px;border-radius:4px;border:1px solid var(--line)">`;
+        const btn = el("s-identify-btn");
+        if (btn) { btn.disabled = false; el("s-identify-result").innerHTML = ""; }
       });
     });
+    if (state.fishId) el("s-identify-btn").addEventListener("click", identifyCatchPhoto);
 
     // GPS : capture automatique dès l'ouverture du formulaire, + bouton manuel
     captureGps();
@@ -1315,6 +1387,38 @@
     document.querySelectorAll("#catches .rm").forEach((b) => {
       b.onclick = () => { if (document.querySelectorAll("#catches .catch-input").length > 1) b.parentElement.remove(); };
     });
+  }
+  // Identification automatique (bêta) : propose une espèce + un poids
+  // TYPIQUE (pas mesuré sur la photo, voir ml/README.md) que le pêcheur
+  // reste libre de corriger avant d'enregistrer — jamais posé comme acquis.
+  async function identifyCatchPhoto() {
+    if (!pendingPhoto) return;
+    const box = el("s-identify-result");
+    const btn = el("s-identify-btn");
+    btn.disabled = true;
+    box.innerHTML = `<span class="hint">Identification en cours…</span>`;
+    try {
+      const r = await API.identifyPhoto(pendingPhoto);
+      const pct = Math.round((r.confiance || 0) * 100);
+      box.innerHTML = `
+        <div class="info-badge">
+          Espèce détectée : <b>${esc(r.espece)}</b> (confiance ${pct}%)
+          ${r.poidsEstimeKg != null ? ` — poids typique estimé : <b>${r.poidsEstimeKg} kg</b> par poisson (à ajuster selon la quantité)` : ""}
+          <br><button class="btn ghost small" id="s-identify-use" style="margin-top:6px">Utiliser cette estimation</button>
+        </div>`;
+      el("s-identify-use").addEventListener("click", () => {
+        const row = document.querySelector("#catches .catch-input");
+        if (row) {
+          row.querySelector('[data-f="esp"]').value = r.espece;
+          if (r.poidsEstimeKg != null) row.querySelector('[data-f="kg"]').value = r.poidsEstimeKg;
+        }
+        toast("Estimation appliquée — vérifiez avant d'enregistrer");
+      });
+    } catch (e) {
+      box.innerHTML = `<span class="hint">${esc(e.message)}</span>`;
+    } finally {
+      btn.disabled = false;
+    }
   }
   async function saveTrip() {
     const prises = [];

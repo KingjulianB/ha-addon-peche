@@ -133,6 +133,8 @@ ensureColumn("users", "email", "TEXT");
 ensureColumn("users", "email_verifie", "INTEGER DEFAULT 0");
 ensureColumn("users", "verif_token", "TEXT");
 ensureColumn("users", "actif", "INTEGER DEFAULT 1");
+ensureColumn("users", "reset_token", "TEXT");
+ensureColumn("users", "reset_expires", "INTEGER");
 ensureColumn("entreprises", "email_contact", "TEXT");
 ensureColumn("trips", "entreprise_id", "TEXT");
 ensureColumn("tracks", "entreprise_id", "TEXT");
@@ -181,6 +183,7 @@ export const Users = {
   byName: db.prepare("SELECT * FROM users WHERE username = ?"),
   byEmail: db.prepare("SELECT * FROM users WHERE email = ?"),
   byToken: db.prepare("SELECT * FROM users WHERE verif_token = ?"),
+  byResetToken: db.prepare("SELECT * FROM users WHERE reset_token = ?"),
   all: db.prepare("SELECT id, username, email, role, entreprise_id, email_verifie, actif, created_at FROM users ORDER BY role, username"),
   insert: db.prepare(`INSERT INTO users (id, username, email, password, role, entreprise_id, email_verifie, verif_token, actif, created_at)
                       VALUES (@id,@username,@email,@password,@role,@entreprise_id,@email_verifie,@verif_token,@actif,@created_at)`),
@@ -189,6 +192,8 @@ export const Users = {
   setEntreprise: db.prepare("UPDATE users SET entreprise_id = ? WHERE username = ?"),
   verify: db.prepare("UPDATE users SET email_verifie = 1, verif_token = NULL WHERE id = ?"),
   setActif: db.prepare("UPDATE users SET actif = ? WHERE id = ?"),
+  setResetToken: db.prepare("UPDATE users SET reset_token = ?, reset_expires = ? WHERE id = ?"),
+  resetPassword: db.prepare("UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?"),
 };
 
 export const Entreprises = {
@@ -251,6 +256,7 @@ export const Expenses = {
   all: db.prepare("SELECT * FROM expenses ORDER BY date DESC, created_at DESC"),
   allByEnt: db.prepare("SELECT * FROM expenses WHERE entreprise_id = ? ORDER BY date DESC, created_at DESC"),
   byTrip: db.prepare("SELECT * FROM expenses WHERE trip_id = ?"),
+  one: db.prepare("SELECT * FROM expenses WHERE id = ?"),
   insert: db.prepare(`INSERT INTO expenses (id,date,type,label,amount,trip_id,entreprise_id,created_at)
                       VALUES (@id,@date,@type,@label,@amount,@trip_id,@entreprise_id,@created_at)`),
   del: db.prepare("DELETE FROM expenses WHERE id = ?"),

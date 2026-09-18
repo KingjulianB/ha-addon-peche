@@ -32,6 +32,30 @@ export function getSession(token) {
 export function destroySession(token) {
   if (token) sessions.delete(token);
 }
+// Révoque toutes les sessions ouvertes d'un utilisateur (ex: après reset mdp).
+export function destroySessionsForUser(userId) {
+  for (const [token, s] of sessions) if (s.id === userId) sessions.delete(token);
+}
+
+// --- Réinitialisation de mot de passe ("mot de passe oublié") ---
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
+
+export function createResetToken(user) {
+  const token = randomBytes(24).toString("hex");
+  Users.setResetToken.run(token, Date.now() + RESET_TOKEN_TTL_MS, user.id);
+  return token;
+}
+
+export function resetPasswordWithToken(token, newPassword) {
+  const user = Users.byResetToken.get(token);
+  if (!user) return { ok: false, error: "Lien invalide ou déjà utilisé." };
+  if (!user.reset_expires || user.reset_expires < Date.now()) {
+    return { ok: false, error: "Lien expiré. Refaites une demande de réinitialisation." };
+  }
+  Users.resetPassword.run(hashPassword(newPassword), user.id);
+  destroySessionsForUser(user.id);
+  return { ok: true, user };
+}
 
 // --- Compte admin de TON entreprise, défini par email dans la config ---
 // Remplace l'ancien système admin/pecheur : la connexion se fait par email.

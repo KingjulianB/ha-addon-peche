@@ -45,6 +45,8 @@ const API = (() => {
     },
     register: (entreprise, email, password) => req("POST", "/api/register", { entreprise, email, password }),
     verify: (token) => req("GET", `/api/verify?token=${encodeURIComponent(token)}`),
+    forgotPassword: (email) => req("POST", "/api/forgot-password", { email }),
+    resetPassword: (token, password) => req("POST", "/api/reset-password", { token, password }),
     entreprises: () => req("GET", "/api/entreprises"),
     setEntrepriseStatut: (id, statut) => req("POST", `/api/entreprises/${id}/statut`, { statut }),
     verifierEntreprise: (id) => req("POST", `/api/entreprises/${id}/verifier`),
@@ -78,6 +80,9 @@ const API = (() => {
 
     nemoStatus: () => req("GET", "/api/nemo/status"),
     nemoSync: (r) => req("POST", "/api/nemo/sync", r),
+
+    identifyPhotoStatus: () => req("GET", "/api/identify-photo/status"),
+    identifyPhoto: (photo) => req("POST", "/api/identify-photo", { photo }),
 
     expenses: () => req("GET", "/api/expenses"),
     addExpense: (e) => req("POST", "/api/expenses", e),

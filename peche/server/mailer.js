@@ -101,6 +101,65 @@ export async function sendVerification(email, nomEntreprise, token) {
   }
 }
 
+export function resetUrl(token) {
+  const base = BASE_URL || "";
+  return `${base}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Envoie l'email de réinitialisation de mot de passe. Renvoie { sent: bool, url }.
+ * Si SMTP non configuré : { sent:false, url } — le lien est utilisable
+ * manuellement.
+ */
+export async function sendPasswordReset(email, token) {
+  const url = resetUrl(token);
+  if (!smtpConfigured()) {
+    console.log(`[MAIL simulé] Réinitialisation de mot de passe pour ${email} : ${url}`);
+    return { sent: false, url };
+  }
+  try {
+    const t = getTransporter();
+    const attachments = [];
+    let logoTag = "";
+    if (existsSync(LOGO_PATH)) {
+      attachments.push({ filename: "fisher-link.png", path: LOGO_PATH, cid: "logofl" });
+      logoTag = `<img src="cid:logofl" width="72" height="72" alt="Fisher Link" style="display:block;margin:0 auto 12px;border-radius:14px">`;
+    }
+    const html = `
+      <div style="max-width:480px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1a1d1a"><meta charset="utf-8">
+        <div style="text-align:center;padding:24px 0 8px">
+          ${logoTag}
+          <div style="font-size:22px;font-weight:700;color:#12395f">Fisher Link</div>
+          <div style="font-size:13px;color:#888">Journal de bord & gestion de pêche</div>
+        </div>
+        <div style="background:#f6f4ef;border-radius:8px;padding:24px;margin-top:12px">
+          <p>Bonjour,</p>
+          <p>Vous avez demandé la réinitialisation du mot de passe de votre compte Fisher Link.</p>
+          <p>Choisissez un nouveau mot de passe (lien valable 1 heure) :</p>
+          <p style="text-align:center;margin:24px 0">
+            <a href="${url}" style="display:inline-block;background:#0d5c4a;color:#fff;text-decoration:none;padding:12px 28px;border-radius:6px;font-weight:600">Choisir un nouveau mot de passe</a>
+          </p>
+          <p style="font-size:12px;color:#888">Ou copiez ce lien dans votre navigateur :<br><span style="word-break:break-all">${url}</span></p>
+        </div>
+        <p style="font-size:11px;color:#aaa;text-align:center;margin-top:16px">Si vous n'êtes pas à l'origine de cette demande, ignorez cet email : votre mot de passe restera inchangé.</p>
+      </div>`;
+    await t.sendMail({
+      from: FROM, to: email,
+      subject: "Fisher Link — Réinitialisation de votre mot de passe",
+      text: `Bonjour,\n\nVous avez demandé la réinitialisation du mot de passe de votre compte Fisher Link.\n`
+          + `Choisissez un nouveau mot de passe en ouvrant ce lien (valable 1 heure) :\n${url}\n\n`
+          + `Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.`,
+      html, attachments,
+      encoding: "utf-8",
+      textEncoding: "base64",
+    });
+    return { sent: true, url };
+  } catch (e) {
+    console.warn("Envoi email échoué, lien disponible manuellement :", e.message);
+    return { sent: false, url, error: e.message };
+  }
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }

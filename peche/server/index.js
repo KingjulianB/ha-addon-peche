@@ -7,11 +7,13 @@ import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, defaultEntrepriseId, db } from "./db.js";
 import { trackDistanceKm, trackDurationH } from "./geo.js";
 import { nemoConfigured, fetchNemoTrack } from "./nemo.js";
+import { fishIdConfigured, identifyPhoto } from "./fishid.js";
 import { nextcloudConfigured, uploadPhoto, downloadPhoto } from "./nextcloud.js";
 import {
   ensureAdminAccount, createUser, verifyPassword, createSession, getSession, destroySession, hashPassword,
+  createResetToken, resetPasswordWithToken,
 } from "./auth.js";
-import { sendVerification, smtpConfigured } from "./mailer.js";
+import { sendVerification, smtpConfigured, sendPasswordReset } from "./mailer.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -103,8 +105,9 @@ app.post("/api/login", (req, res) => {
   if (user.email_verifie === 0) {
     return res.status(403).json({ error: "Email non vérifié. Vérifiez votre boîte mail (ou le lien fourni)." });
   }
-  // Entreprise suspendue ?
-  if (user.entreprise_id) {
+  // Entreprise suspendue ? (le super-admin garde toujours l'accès, pour ne
+  // jamais se retrouver bloqué hors de la plateforme qu'il administre)
+  if (user.entreprise_id && !isSuperAdmin(user)) {
     const ent = Entreprises.one.get(user.entreprise_id);
     if (ent && ent.statut === "suspendu") {
       return res.status(403).json({ error: "Entreprise suspendue. Contactez l'éditeur." });
@@ -156,6 +159,34 @@ app.get("/api/verify", (req, res) => {
   res.json({ ok: true, email: user.email });
 });
 
+// --- Mot de passe oublié : demande d'un lien de réinitialisation ---
+app.post("/api/forgot-password", async (req, res) => {
+  const email = (req.body?.email || "").trim().toLowerCase();
+  if (!email) return res.status(400).json({ error: "Email requis." });
+  const user = Users.byEmail.get(email);
+  // Réponse identique que le compte existe ou non, pour ne pas révéler
+  // quels emails sont enregistrés.
+  if (!user) return res.json({ ok: true });
+  const token = createResetToken(user);
+  const mail = await sendPasswordReset(email, token);
+  res.json({ ok: true, email_envoye: mail.sent,
+    // en mode sans SMTP, on renvoie le lien pour pouvoir réinitialiser quand même
+    lien_reinitialisation: mail.sent ? undefined : mail.url });
+});
+
+// --- Mot de passe oublié : validation du lien + nouveau mot de passe ---
+app.post("/api/reset-password", (req, res) => {
+  const token = String(req.body?.token || "");
+  const password = req.body?.password || "";
+  if (!token) return res.status(400).json({ error: "Lien invalide." });
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Mot de passe trop court (6 caractères minimum)." });
+  }
+  const r = resetPasswordWithToken(token, password);
+  if (!r.ok) return res.status(400).json({ error: r.error });
+  res.json({ ok: true });
+});
+
 app.post("/api/logout", (req, res) => {
   destroySession(parseCookies(req).session);
   res.setHeader("Set-Cookie", "session=; HttpOnly; Path=/; Max-Age=0");
@@ -179,12 +210,21 @@ app.get("/api/entreprises", requireAuth, requireSuperAdmin, (req, res) => {
   const rows = Entreprises.all.all().map((e) => {
     const admin = db.prepare("SELECT email, email_verifie FROM users WHERE entreprise_id = ? AND role = 'admin' LIMIT 1").get(e.id);
     const nbSorties = db.prepare("SELECT COUNT(*) n FROM trips WHERE entreprise_id = ?").get(e.id).n;
-    return { ...e, admin_email: admin?.email, admin_verifie: admin?.email_verifie, nb_sorties: nbSorties };
+    return { ...e, admin_email: admin?.email, admin_verifie: admin?.email_verifie, nb_sorties: nbSorties,
+      admin_superadmin: isSuperAdmin({ email: admin?.email }) };
   });
   res.json(rows);
 });
 app.post("/api/entreprises/:id/statut", requireAuth, requireSuperAdmin, (req, res) => {
   const statut = req.body?.statut === "suspendu" ? "suspendu" : "actif";
+  // Le compte administrateur principal (l'éditeur de la plateforme) ne doit
+  // jamais pouvoir être suspendu, y compris par lui-même par erreur.
+  if (statut === "suspendu") {
+    const admin = db.prepare("SELECT email FROM users WHERE entreprise_id = ? AND role = 'admin' LIMIT 1").get(req.params.id);
+    if (isSuperAdmin({ email: admin?.email })) {
+      return res.status(403).json({ error: "Le compte administrateur principal ne peut pas être suspendu." });
+    }
+  }
   Entreprises.setStatut.run(statut, req.params.id);
   res.json({ ok: true, statut });
 });
@@ -387,7 +427,8 @@ app.get("/api/tracks", requireAuth, (req, res) => res.json(Tracks.allByEnt.all(e
 app.get("/api/tracks/:id", requireAuth, (req, res) => {
   const t = Tracks.one.get(req.params.id);
   if (!t) return res.status(404).json({ error: "Trace introuvable." });
-  t.points = JSON.parse(t.points); res.json(t);
+  if (!sameEnt(t, req)) return res.status(403).json({ error: "Accès refusé." });
+  t.points = safeParse(t.points, []); res.json(t);
 });
 
 function saveTrack({ points, date, depart, retour, source, entreprise_id }) {
@@ -414,6 +455,17 @@ app.get("/api/nemo/status", requireAuth, (req, res) => res.json({ configured: ne
 app.post("/api/nemo/sync", requireAuth, async (req, res) => {
   try { const { since, until } = req.body || {}; const points = await fetchNemoTrack(since, until); const r = saveTrack({ points, source: "nemo", entreprise_id: entOf(req) }); res.json({ ok: true, id: r.id, points: points.length, dist_km: r.dist_km }); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+// ---------- IDENTIFICATION AUTOMATIQUE (espèce + poids, depuis une photo) ----------
+app.get("/api/identify-photo/status", requireAuth, (req, res) => res.json({ configured: fishIdConfigured() }));
+app.post("/api/identify-photo", requireAuth, async (req, res) => {
+  try {
+    const { photo } = req.body || {};
+    if (!photo) return res.status(400).json({ error: "Photo manquante." });
+    const r = await identifyPhoto(photo);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 // ---------- RÉGLAGES (admin pour modifier) ----------
@@ -454,6 +506,8 @@ app.post("/api/expenses", requireAuth, requireAdmin, (req, res) => {
 });
 
 app.delete("/api/expenses/:id", requireAuth, requireAdmin, (req, res) => {
+  const cur = Expenses.one.get(req.params.id);
+  if (cur && !sameEnt(cur, req)) return res.status(403).json({ error: "Accès refusé." });
   Expenses.del.run(req.params.id);
   res.json({ ok: true });
 });
@@ -666,6 +720,8 @@ app.get("/api/export.xlsx", requireAuth, requireAdmin, async (req, res) => {
 // ---------- statiques ----------
 // La page de vérification (/verifier?token=...) sert l'appli (SPA)
 app.get("/verifier", (req, res) => res.sendFile(join(__dirname, "..", "public", "index.html")));
+// La page de réinitialisation de mot de passe (/reset-password?token=...) sert l'appli (SPA)
+app.get("/reset-password", (req, res) => res.sendFile(join(__dirname, "..", "public", "index.html")));
 app.use(express.static(join(__dirname, "..", "public")));
 
 // ---------- helpers ----------

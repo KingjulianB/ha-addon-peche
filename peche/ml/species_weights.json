@@ -1,0 +1,20 @@
+{
+  "_readme": "Poids TYPIQUE (kg) par espèce, utilisé comme estimation quand aucune échelle de référence n'est présente dans la photo (voir planning/discrepancies.md § Weight Estimation Method). Valeurs de départ approximatives, à corriger avec vos propres observations réelles au débarquement — ce n'est pas une source scientifique. Les clés doivent correspondre exactement aux classes du modèle (labels.json).",
+  "bar": 1.5,
+  "carangue": 2.0,
+  "carpe": 1.2,
+  "capitaine": 4.0,
+  "dorade": 1.0,
+  "espadon": 60.0,
+  "mérou": 5.0,
+  "machoiron": 1.5,
+  "maquereau": 0.4,
+  "mulet": 0.8,
+  "raie": 3.0,
+  "requin": 15.0,
+  "sardine": 0.1,
+  "sole": 0.5,
+  "thiof": 6.0,
+  "thon": 20.0,
+  "tilapia": 0.6
+}

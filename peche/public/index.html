@@ -24,12 +24,46 @@
     <input id="pw" type="password" autocomplete="current-password" placeholder="••••••">
     <button id="loginBtn">Se connecter</button>
     <p id="loginErr" class="err" hidden></p>
+    <p style="text-align:center;margin-top:12px;font-size:13px">
+      <button id="goForgot" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Mot de passe oublié ?</button>
+    </p>
     <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">Pas encore de compte ?
       <button id="goRegister" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Créer mon entreprise</button>
     </p>
     <p style="text-align:center;margin-top:8px;font-size:13px;color:var(--ink-faint)">Vous êtes pêcheur avec un code ?
       <button id="goJoin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Rejoindre une entreprise</button>
     </p>
+  </div>
+</div>
+
+<!-- ---------- Écran : mot de passe oublié (demande du lien) ---------- -->
+<div id="forgot" class="login" hidden>
+  <div class="login-card">
+    <img class="logo" src="/logo.svg" alt="Fisher Link" width="72" height="72">
+    <h1 class="fr">Mot de passe oublié</h1>
+    <p class="sub">Recevez un lien par email pour choisir un nouveau mot de passe.</p>
+    <label for="f-email">Votre email</label>
+    <input id="f-email" type="email" autocomplete="email" placeholder="vous@exemple.com">
+    <button id="forgotBtn">Envoyer le lien</button>
+    <p id="forgotErr" class="err" hidden></p>
+    <div id="forgotOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
+    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">
+      <button id="forgotToLogin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Retour à la connexion</button>
+    </p>
+  </div>
+</div>
+
+<!-- ---------- Écran : choix du nouveau mot de passe (lien reçu par email) ---------- -->
+<div id="resetpw" class="login" hidden>
+  <div class="login-card">
+    <img class="logo" src="/logo.svg" alt="Fisher Link" width="72" height="72">
+    <h1 class="fr">Nouveau mot de passe</h1>
+    <p class="sub">Choisissez un nouveau mot de passe pour votre compte.</p>
+    <label for="rp-pw">Nouveau mot de passe</label>
+    <input id="rp-pw" type="password" autocomplete="new-password" placeholder="6 caractères minimum">
+    <button id="resetpwBtn">Valider</button>
+    <p id="resetpwErr" class="err" hidden></p>
+    <div id="resetpwOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
   </div>
 </div>
 
