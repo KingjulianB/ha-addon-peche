@@ -1,0 +1,20 @@
+{
+  "name": "peche-port-gentil",
+  "version": "1.0.0",
+  "description": "Journal de bord électronique + suivi VMS pour la pêche artisanale (Port-Gentil). Compatible NEMO.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.3.0",
+    "exceljs": "^4.4.0",
+    "express": "^4.21.0",
+    "nodemailer": "^6.9.15"
+  }
+}
