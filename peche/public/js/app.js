@@ -1402,14 +1402,14 @@
       const pct = Math.round((r.confiance || 0) * 100);
       box.innerHTML = `
         <div class="info-badge">
-          Espèce détectée : <b>${esc(r.espece)}</b> (confiance ${pct}%)
+          Espèce détectée : <b>${esc(r.especeFr || r.espece)}</b> (confiance ${pct}%)
           ${r.poidsEstimeKg != null ? ` — poids typique estimé : <b>${r.poidsEstimeKg} kg</b> par poisson (à ajuster selon la quantité)` : ""}
           <br><button class="btn ghost small" id="s-identify-use" style="margin-top:6px">Utiliser cette estimation</button>
         </div>`;
       el("s-identify-use").addEventListener("click", () => {
         const row = document.querySelector("#catches .catch-input");
         if (row) {
-          row.querySelector('[data-f="esp"]').value = r.espece;
+          row.querySelector('[data-f="esp"]').value = r.especeFr || r.espece;
           if (r.poidsEstimeKg != null) row.querySelector('[data-f="kg"]').value = r.poidsEstimeKg;
         }
         toast("Estimation appliquée — vérifiez avant d'enregistrer");

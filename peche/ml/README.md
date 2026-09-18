@@ -54,6 +54,15 @@ liste de départ, à corriger/compléter avec vos propres espèces locales
 et vos observations réelles — ce n'est pas une donnée scientifique
 fiable telle quelle.
 
+Format : `{ "<classe exacte du modèle, ex: labels.json>": { "nom_fr":
+"<nom affiché au pêcheur>", "poids_kg": <poids typique> } }`. La clé
+doit correspondre **exactement** à ce que le modèle renvoie (les
+classes du dataset Kaggle "A Large Scale Fish Dataset" sont en
+anglais, ex. `"Sea Bass"`, pas `"bar"`) — sinon `especeFr` retombe sur
+le nom anglais et `poidsEstimeKg` reste `null`, comme c'était le cas
+avant que ce fichier ne soit mis à jour avec les vraies classes issues
+de l'entraînement (voir `planning/discrepancies.md`).
+
 ## Réentraînement avec vos propres photos
 
 Les photos de débarquement sont déjà stockées par l'application

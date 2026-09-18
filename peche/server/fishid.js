@@ -90,7 +90,7 @@ function softmaxConfidence(logits, bestIdx) {
  * jamais comme une valeur mesurée (voir planning/agreed-workflow.md).
  *
  * @param {string} dataUrl
- * @returns {Promise<{espece:string, confiance:number, poidsEstimeKg:number|null}>}
+ * @returns {Promise<{espece:string, especeFr:string, confiance:number, poidsEstimeKg:number|null}>}
  */
 export async function identifyPhoto(dataUrl) {
   if (!fishIdConfigured()) {
@@ -112,9 +112,11 @@ export async function identifyPhoto(dataUrl) {
   for (let k = 1; k < logits.length; k++) if (logits[k] > logits[best]) best = k;
 
   const espece = labels[best] || "inconnue";
+  const info = weights[espece];
   return {
     espece,
+    especeFr: info?.nom_fr || espece,
     confiance: softmaxConfidence(logits, best),
-    poidsEstimeKg: espece in weights ? weights[espece] : null,
+    poidsEstimeKg: info?.poids_kg ?? null,
   };
 }
