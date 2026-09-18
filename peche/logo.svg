@@ -1,0 +1,63 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="ocean" x1="80" y1="120" x2="430" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b4f72"/>
+      <stop offset="0.55" stop-color="#12395f"/>
+      <stop offset="1" stop-color="#0c2740"/>
+    </linearGradient>
+    <linearGradient id="body" x1="150" y1="180" x2="380" y2="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e8f1f6"/>
+      <stop offset="1" stop-color="#a9c7d8"/>
+    </linearGradient>
+    <linearGradient id="fin" x1="300" y1="180" x2="420" y2="330" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2e8bb0"/>
+      <stop offset="1" stop-color="#1b6a8c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- pastille océan -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#ocean)"/>
+
+  <!-- vagues de fond -->
+  <path d="M60 372 Q130 344 200 372 T340 372 T480 372" fill="none" stroke="#2e8bb0" stroke-width="7" stroke-linecap="round" opacity="0.35"/>
+  <path d="M40 410 Q120 384 200 410 T360 410 T500 410" fill="none" stroke="#2e8bb0" stroke-width="7" stroke-linecap="round" opacity="0.22"/>
+
+  <!-- corps du poisson -->
+  <path d="M126 256
+           C126 196 190 156 262 156
+           C316 156 356 182 378 214
+           C398 200 420 194 440 194
+           C428 224 428 248 440 280
+           C424 306 396 322 362 330
+           C338 356 300 372 262 372
+           C190 372 126 316 126 256 Z"
+        fill="url(#body)" stroke="#0c2740" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- nageoire caudale (queue) -->
+  <path d="M126 256
+           C96 232 74 214 60 196
+           C86 214 108 224 126 226
+           M126 256
+           C96 280 74 298 60 316
+           C86 298 108 288 126 286 Z"
+        fill="url(#fin)" stroke="#0c2740" stroke-width="9" stroke-linejoin="round"/>
+
+  <!-- nageoire dorsale -->
+  <path d="M236 158 C244 128 268 114 296 112 C286 130 282 146 284 160 Z"
+        fill="url(#fin)" stroke="#0c2740" stroke-width="8" stroke-linejoin="round"/>
+
+  <!-- ligne latérale (le « link ») en pointillés -->
+  <path d="M180 262 Q250 236 330 258" fill="none" stroke="#1b6a8c" stroke-width="7"
+        stroke-linecap="round" stroke-dasharray="2 22"/>
+
+  <!-- œil -->
+  <circle cx="332" cy="236" r="19" fill="#0c2740"/>
+  <circle cx="326" cy="230" r="6" fill="#e8f1f6"/>
+
+  <!-- branchie -->
+  <path d="M300 206 Q288 256 300 306" fill="none" stroke="#0c2740" stroke-width="7" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- bulle -->
+  <circle cx="392" cy="150" r="10" fill="#e8f1f6" opacity="0.7"/>
+  <circle cx="418" cy="126" r="6" fill="#e8f1f6" opacity="0.5"/>
+</svg>
