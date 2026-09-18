@@ -36,6 +36,10 @@ def main():
         output_names=["logits"],
         dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
         opset_version=17,
+        dynamo=False,  # exporteur historique : garde les poids dans UN SEUL fichier
+                       # .onnx (le nouvel exporteur "dynamo" les externalise par
+                       # défaut dans un fichier .onnx.data séparé, facile à oublier
+                       # de télécharger — server/fishid.js n'attend qu'un seul fichier)
     )
     print(f"Exporté : {args.out}")
 
