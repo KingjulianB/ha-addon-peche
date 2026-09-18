@@ -7,7 +7,7 @@ import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, defaultEntrepriseId, db } from "./db.js";
 import { trackDistanceKm, trackDurationH } from "./geo.js";
 import { nemoConfigured, fetchNemoTrack } from "./nemo.js";
-import { fishIdConfigured, identifyPhoto } from "./fishid.js";
+import { fishIdConfigured, identifyPhoto, estimateWeightFromLength } from "./fishid.js";
 import { nextcloudConfigured, uploadPhoto, downloadPhoto } from "./nextcloud.js";
 import {
   ensureAdminAccount, createUser, verifyPassword, createSession, getSession, destroySession, hashPassword,
@@ -464,6 +464,16 @@ app.post("/api/identify-photo", requireAuth, async (req, res) => {
     const { photo } = req.body || {};
     if (!photo) return res.status(400).json({ error: "Photo manquante." });
     const r = await identifyPhoto(photo);
+    res.json(r);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+// Poids à partir d'une espèce + longueur mesurée (cm) — ex: app compagnon
+// avec mesure de profondeur (LiDAR/ToF), plus précis qu'un poids moyen.
+app.post("/api/estimate-weight", requireAuth, (req, res) => {
+  try {
+    const { espece, longueur_cm } = req.body || {};
+    if (!espece || !longueur_cm) return res.status(400).json({ error: "espece et longueur_cm requis." });
+    const r = estimateWeightFromLength(espece, +longueur_cm);
     res.json(r);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

@@ -38,6 +38,21 @@ export function fishIdConfigured() {
   return existsSync(MODEL_PATH) && existsSync(LABELS_PATH);
 }
 
+let weightsLoaded = false;
+// Chargé indépendamment du modèle ONNX : utilisé aussi par
+// estimateWeightFromLength(), qui n'a pas besoin d'identifier l'espèce
+// depuis une photo (ex: appelée depuis l'appli mobile compagnon avec une
+// espèce déjà connue).
+function loadWeights() {
+  if (weightsLoaded) return;
+  weightsLoaded = true;
+  if (existsSync(WEIGHTS_PATH)) {
+    const raw = JSON.parse(readFileSync(WEIGHTS_PATH, "utf8"));
+    delete raw._readme;
+    weights = raw;
+  }
+}
+
 async function loadModel() {
   if (session) return session;
   // Backend WASM (pas de binding natif) : évite le souci de compatibilité
@@ -46,11 +61,7 @@ async function loadModel() {
   const ort = await import("onnxruntime-web");
   session = await ort.InferenceSession.create(MODEL_PATH, { executionProviders: ["wasm"] });
   labels = JSON.parse(readFileSync(LABELS_PATH, "utf8"));
-  if (existsSync(WEIGHTS_PATH)) {
-    const raw = JSON.parse(readFileSync(WEIGHTS_PATH, "utf8"));
-    delete raw._readme;
-    weights = raw;
-  }
+  loadWeights();
   return session;
 }
 
@@ -119,4 +130,39 @@ export async function identifyPhoto(dataUrl) {
     confiance: softmaxConfidence(logits, best),
     poidsEstimeKg: info?.poids_kg ?? null,
   };
+}
+
+/**
+ * Estime le poids à partir de l'espèce ET d'une longueur mesurée (cm),
+ * via la relation taille-poids allométrique W = a × L^b (a, b par
+ * espèce dans species_weights.json). Bien plus précis qu'un poids
+ * moyen par espèce (identifyPhoto()) SI la longueur est mesurée
+ * correctement (ex: app compagnon avec LiDAR/profondeur) et si les
+ * coefficients a/b sont fiables pour l'espèce — voir l'avertissement
+ * dans species_weights.json : les valeurs actuelles sont des valeurs
+ * de départ non vérifiées auprès de FishBase espèce par espèce, pas
+ * une donnée scientifique validée.
+ *
+ * @param {string} espece - doit correspondre exactement à une clé de species_weights.json
+ * @param {number} longueurCm
+ * @returns {{poidsKg:number, methode:"allometrie"|"moyenne_espece", fiable:boolean}}
+ */
+export function estimateWeightFromLength(espece, longueurCm) {
+  loadWeights();
+  const info = weights[espece];
+  if (!info) {
+    throw new Error(`Espèce inconnue : "${espece}".`);
+  }
+  if (!(longueurCm > 0)) {
+    throw new Error("Longueur invalide.");
+  }
+  if (info.a != null && info.b != null) {
+    const poidsKg = (info.a * Math.pow(longueurCm, info.b)) / 1000; // a,b calibrés en grammes/cm (convention FishBase)
+    return { poidsKg, methode: "allometrie", fiable: false };
+  }
+  // Pas de coefficients a/b pour cette espèce (ex: crevette, pas un poisson) : repli sur le poids moyen.
+  if (info.poids_kg != null) {
+    return { poidsKg: info.poids_kg, methode: "moyenne_espece", fiable: false };
+  }
+  throw new Error(`Aucune donnée de poids pour "${espece}".`);
 }
