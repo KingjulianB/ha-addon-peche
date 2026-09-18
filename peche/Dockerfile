@@ -13,6 +13,7 @@ RUN npm install --omit=dev
 # Code de l'application
 COPY server ./server
 COPY public ./public
+COPY ml ./ml
 
 # Script de démarrage s6 : l'image de base HA l'exécute automatiquement.
 # Il doit être dans /etc/services.d/<nom>/run — PAS de CMD (géré par s6-overlay).
