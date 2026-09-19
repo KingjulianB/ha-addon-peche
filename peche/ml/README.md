@@ -5,14 +5,31 @@ Ce dossier contient le nécessaire pour entraîner le modèle utilisé par
 dans le conteneur Docker de l'add-on) : on obtient un fichier
 `model.onnx`, on le copie ici, et le serveur s'en sert au démarrage.
 
-Modèle actuel : classifieur **12 espèces gabonaises** (pêche
-artisanale côtière, Port-Gentil) — Ethmalose, Otolithe sénégalais/
-Courbine, Mâchoiron, Capitaine, Carpe rouge/Pagre, Bar barracuda,
-Thiof/Mérou, Carangue, Sole, Thon, Crevette, Sardinelle. Il remplace un
-premier modèle générique (9 espèces du dataset Kaggle "A Large Scale
-Fish Dataset" — bar, dorade, truite... peu pertinentes pour le Gabon).
-Voir `planning/discrepancies.md` § Species Scope — revised to
-Gabon-specific pour l'historique de cette décision.
+Modèle actuel : classifieur **21 espèces** — les **12 espèces
+gabonaises** (pêche artisanale côtière, Port-Gentil) — Ethmalose,
+Otolithe sénégalais/Courbine, Mâchoiron, Capitaine, Carpe rouge/Pagre,
+Bar barracuda, Thiof/Mérou, Carangue, Sole, Thon, Crevette, Sardinelle —
+**fusionnées** avec les **9 espèces génériques** du dataset Kaggle "A
+Large Scale Fish Dataset" (Sprat, Dorade royale, Chinchard, Rouget de
+vase, Dorade rose, Bar européen, Crevette kaggle, Rouget de roche,
+Truite). Ce dataset générique avait été utilisé pour le tout premier
+modèle (2026-09-18), puis remplacé par le modèle Gabon-only
+(2026-09-19, voir `planning/discrepancies.md` § Species Scope — revised
+to Gabon-specific) — il a été **réintégré** le 2026-09-19 (même
+journée) après une confusion observée en usage réel entre une classe
+gabonaise ("Capitaine") et une espèce hors périmètre absente du modèle
+Gabon-only ("bar") : plutôt que d'exclure les espèces génériques, elles
+redeviennent des classes à part entière. Voir `planning/discrepancies.md`
+§ Merge Kaggle + Gabon datasets.
+
+**Déséquilibre de classes :** les 12 classes gabonaises n'ont que 19 à
+132 photos chacune (GBIF/Wikimedia, disponibilité réelle limitée — voir
+plus bas) contre 300 pour chacune des 9 classes génériques
+(sous-échantillonnées depuis 1000, voir `download_kaggle.py`). `train.py`
+pondère la perte par l'inverse de la fréquence de classe pour compenser,
+mais les classes les plus rares restent structurellement moins bien
+apprises — à surveiller si la confusion persiste après ce
+réentraînement.
 
 ## Jeu de données : GBIF/iNaturalist
 
@@ -71,6 +88,39 @@ l'entraînement (`INPUT_SIZE = 224`).
 ```bash
 python download_gbif.py --out data --max-per-species 150
 python download_wikimedia.py --out data
+```
+
+**Source complémentaire ciblée : dataset Kaggle iNaturalist.**
+`download_inaturalist_kaggle.py` ajoute des photos supplémentaires pour
+4 classes seulement (Carangue, Bar barracuda, Thiof/Mérou, Carpe rouge/
+Pagre) depuis un dataset Kaggle qui republie des observations
+iNaturalist (`chandavandann/global-fish-species-image-dataset-inaturalist`,
+licences par photo, majoritairement CC BY-NC) :
+
+```bash
+python download_inaturalist_kaggle.py --out data
+```
+
+Ne couvre PAS Capitaine/Ethmalose/Otolithe sénégalais/Mâchoiron —
+aucune espèce du dataset ne correspond à ces genres (vérifié avant
+d'écrire le script, voir `planning/discrepancies.md`).
+
+## Jeu de données : Kaggle (9 espèces génériques)
+
+`download_kaggle.py` télécharge et ajoute à `data/` les 9 classes du
+dataset Kaggle "A Large Scale Fish Dataset" (`crowww/a-large-scale-fish-dataset`,
+CC BY 4.0) — voir § historique plus haut. Nécessite une authentification
+Kaggle (`pip install kaggle`, puis `~/.kaggle/kaggle.json` ou
+`~/.kaggle/access_token`, voir https://www.kaggle.com/docs/api). Le zip
+source (~3.5 Go) contient, par espèce, un dossier de vraies photos et un
+dossier "<espèce> GT" de masques de segmentation (ignoré) ; il contient
+aussi un dossier racine parasite `NA_Fish_Dataset` (ignoré, voir
+`planning/project_log.md` #3). Chaque classe (1000 photos dans le zip)
+est plafonnée à 300 par défaut pour limiter le déséquilibre avec les
+classes gabonaises (voir § historique plus haut) :
+
+```bash
+python download_kaggle.py --out data --max-per-species 300
 ```
 
 Avant d'entraîner, vérifiez aussi qu'aucune image n'est corrompue :

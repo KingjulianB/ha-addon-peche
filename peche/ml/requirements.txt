@@ -3,3 +3,4 @@ torchvision>=0.17
 onnx>=1.15
 onnxscript>=0.1
 Pillow>=10.0
+kaggle>=1.6

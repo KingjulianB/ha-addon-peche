@@ -19,6 +19,7 @@ voir README.md § Poids estimé.
 
 import argparse
 import json
+from collections import Counter
 
 import torch
 from torch import nn
@@ -65,7 +66,15 @@ def main():
         model.load_state_dict(torch.load(args.resume, map_location=device))
 
     opt = torch.optim.Adam(model.classifier.parameters(), lr=args.lr)
-    loss_fn = nn.CrossEntropyLoss()
+
+    # Classes très déséquilibrées (ex: dataset fusionné Gabon+Kaggle, de 19 à
+    # 300 photos selon la classe) — pondère la perte par l'inverse de la
+    # fréquence de classe pour éviter que le modèle ignore les classes rares.
+    counts = Counter(label for _, label in dataset.samples)
+    class_weights = torch.tensor(
+        [len(dataset) / counts[i] for i in range(len(labels))], dtype=torch.float32
+    ).to(device)
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights)
 
     for epoch in range(args.epochs):
         model.train()
