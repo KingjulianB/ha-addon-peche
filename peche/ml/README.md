@@ -5,38 +5,76 @@ Ce dossier contient le nécessaire pour entraîner le modèle utilisé par
 dans le conteneur Docker de l'add-on) : on obtient un fichier
 `model.onnx`, on le copie ici, et le serveur s'en sert au démarrage.
 
-## Ce qui manque encore pour entraîner réellement
+Modèle actuel : classifieur **12 espèces gabonaises** (pêche
+artisanale côtière, Port-Gentil) — Ethmalose, Otolithe sénégalais/
+Courbine, Mâchoiron, Capitaine, Carpe rouge/Pagre, Bar barracuda,
+Thiof/Mérou, Carangue, Sole, Thon, Crevette, Sardinelle. Il remplace un
+premier modèle générique (9 espèces du dataset Kaggle "A Large Scale
+Fish Dataset" — bar, dorade, truite... peu pertinentes pour le Gabon).
+Voir `planning/discrepancies.md` § Species Scope — revised to
+Gabon-specific pour l'historique de cette décision.
 
-- **Python 3.10+ avec pip**, installé séparément sur une machine de
-  développement (ce n'est pas nécessaire sur le serveur HA — seul le
-  fichier `.onnx` final y est déployé). Au moment de la rédaction, ce
-  n'était pas disponible sur la machine utilisée pour scaffolder ce
-  dossier — voir `planning/discrepancies.md`.
-- **Un jeu de données de photos de poissons étiquetées par espèce.**
-  Pistes possibles : "A Large-Scale Fish Dataset" (Kaggle), Fish4Knowledge,
-  WildFish, ou tout autre jeu de données public d'images de poissons par
-  espèce. Aucun jeu de données n'a été téléchargé ni choisi
-  définitivement — c'est la première chose à trancher avant de lancer
-  `train.py`.
-- **Du temps de calcul** (CPU suffit pour un premier entraînement avec
-  peu d'époques sur un petit sous-ensemble d'espèces ; un GPU accélère
-  beaucoup si vous entraînez sur un jeu de données large/"espèces
-  générales").
+## Jeu de données : GBIF/iNaturalist
 
-## Étapes
+Aucun dataset "Golfe de Guinée"/Afrique de l'Ouest tout prêt n'existe
+(vérifié sur Kaggle, Roboflow). `download_gbif.py` télécharge des
+photos par espèce depuis l'API GBIF (qui agrège surtout des
+observations iNaturalist, plus quelques collections de musées) :
 
 ```bash
 pip install -r requirements.txt
 
-# 1. Placez votre jeu de données sous data/<espèce>/*.jpg
-#    (un sous-dossier par espèce, comme torchvision.datasets.ImageFolder l'attend)
+python download_gbif.py --out data --max-per-species 150
+```
 
-# 2. Entraînement (transfer learning sur un MobileNetV2 pré-entraîné)
+Produit `data/<espèce>/*.jpg` (format attendu par
+`torchvision.datasets.ImageFolder`) + un `attribution.json` par espèce
+(auteur/licence/source de chaque photo).
+
+**Important — à exécuter en local, pas dans Colab/Kaggle/etc. :**
+plusieurs hébergeurs de photos (Natural History Museum Londres,
+MNHN Paris) bloquent les téléchargements automatisés depuis les
+adresses IP des plateformes cloud gratuites (Cloudflare, vérifié en
+pratique) — depuis une machine personnelle normale, ça fonctionne.
+
+**Licence :** majoritairement CC BY-NC (usage non-commercial) —
+acceptée pour l'instant (voir `planning/project_log.md` #14), **à
+revoir avant toute commercialisation de FisherLink**. Conservez les
+`attribution.json` (auteur/licence/source par photo), c'est la preuve
+d'attribution requise par CC BY-NC.
+
+**Fiabilité des comptages par espèce :** GBIF peut rapporter plus
+d'images "disponibles" que ce qui se télécharge réellement (échecs
+403/timeout individuels, normal) — le script affiche à la fin le
+nombre réellement téléchargé par espèce, c'est le seul chiffre fiable.
+Avant d'entraîner, il vaut aussi la peine de vérifier qu'aucun fichier
+n'est corrompu (`PIL.Image.verify()` sur chaque fichier de `data/`) —
+un fichier illisible fait planter `train.py` en cours d'époque.
+
+Certaines classes sont plus fines que d'autres (Otolithe sénégalais,
+Mâchoiron, Carangue notamment) — normal vu la disponibilité réelle des
+photos pour ces espèces en Afrique sur GBIF, voir
+`planning/discrepancies.md`.
+
+## Entraînement
+
+```bash
+# Entraînement (transfer learning sur un MobileNetV2 pré-entraîné)
 python train.py --data-dir data --epochs 10 --out model.pt --labels labels.json
 
-# 3. Export au format ONNX, consommé par server/fishid.js
+# Export au format ONNX, consommé par server/fishid.js
 python export_onnx.py --model model.pt --labels labels.json --out model.onnx
 ```
+
+Sans GPU disponible (ex: quota Colab épuisé), l'entraînement tourne
+aussi sur CPU — le modèle est petit (seule la tête de classification
+est entraînée) et le jeu de données modeste, ça reste de l'ordre de la
+demi-heure. `ml/train_colab.ipynb` reste disponible si un GPU gratuit
+est accessible (Colab, Kaggle Notebooks, AWS SageMaker Studio Lab...) :
+il clone ce dépôt, mais **charge les données via un zip uploadé**
+(préparé en local avec `download_gbif.py`) plutôt que de les
+télécharger depuis la plateforme cloud elle-même, pour la raison
+expliquée ci-dessus.
 
 Une fois `model.onnx` et `labels.json` présents dans ce dossier,
 `fishIdConfigured()` (dans `server/fishid.js`) devient vrai
@@ -49,19 +87,23 @@ Le modèle identifie l'**espèce** à partir de la photo. Comme convenu
 (voir `planning/discrepancies.md` § Weight Estimation Method), le
 **poids** n'est pas mesuré sur l'image (aucune échelle de référence
 dans une photo) : c'est un poids **typique** par espèce, à confirmer ou
-corriger par le pêcheur. `species_weights.json` ne contient qu'une
-liste de départ, à corriger/compléter avec vos propres espèces locales
-et vos observations réelles — ce n'est pas une donnée scientifique
-fiable telle quelle.
+corriger par le pêcheur.
 
 Format : `{ "<classe exacte du modèle, ex: labels.json>": { "nom_fr":
-"<nom affiché au pêcheur>", "poids_kg": <poids typique> } }`. La clé
-doit correspondre **exactement** à ce que le modèle renvoie (les
-classes du dataset Kaggle "A Large Scale Fish Dataset" sont en
-anglais, ex. `"Sea Bass"`, pas `"bar"`) — sinon `especeFr` retombe sur
-le nom anglais et `poidsEstimeKg` reste `null`, comme c'était le cas
-avant que ce fichier ne soit mis à jour avec les vraies classes issues
-de l'entraînement (voir `planning/discrepancies.md`).
+"<nom affiché au pêcheur>", "poids_kg": <poids typique>, "a": ...,
+"b": ... } }`. La clé doit correspondre **exactement** à ce que le
+modèle renvoie (= le nom du sous-dossier dans `data/`, voir
+`SPECIES_QUERIES` dans `download_gbif.py`) — sinon `especeFr` retombe
+sur le nom brut et `poidsEstimeKg` reste `null`, comme c'était le cas
+avant que ce fichier ne soit corrigé une première fois (voir
+`planning/project_log.md` #9).
+
+Les valeurs `poids_kg`/`a`/`b` actuelles sont des valeurs de départ
+tirées de la littérature générale par famille, **non vérifiées espèce
+par espèce sur FishBase** — voir `planning/discrepancies.md` §
+Allometry coefficients. Deux classes (**Capitaine**, **Thon**)
+regroupent chacune plusieurs espèces de tailles adultes très
+différentes, leur `poids_kg` est un compromis encore plus grossier.
 
 ## Réentraînement avec vos propres photos
 
@@ -71,4 +113,6 @@ avez accumulé un nombre suffisant avec l'espèce confirmée par un
 pêcheur, elles peuvent être ajoutées à `data/<espèce>/` pour
 réentraîner (`train.py --resume model.pt`) et affiner le modèle sur vos
 propres conditions (bateau, éclairage, espèces locales réellement
-pêchées) — voir `planning/project_log.md` décision #2.
+pêchées) — c'est la meilleure façon de compenser le peu de photos GBIF
+disponibles pour certaines espèces, et de sortir du biais "photo de
+spécimen de musée" d'une partie du jeu de données actuel.
