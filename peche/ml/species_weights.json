@@ -1,12 +1,15 @@
 {
-  "_readme": "Clé = classe EXACTE renvoyée par le modèle (labels.json), en anglais pour ce jeu de données Kaggle. nom_fr = nom affiché au pêcheur. poids_kg = poids TYPIQUE utilisé par identifyPhoto() quand aucune longueur n'est mesurée (voir planning/discrepancies.md § Weight Estimation Method) — valeurs de départ approximatives, à corriger avec vos propres observations réelles. a/b = coefficients de la relation taille-poids allométrique W(g) = a × L(cm)^b, utilisés par estimateWeightFromLength() (ex: app compagnon avec mesure de longueur réelle) — ATTENTION : ce sont des valeurs de départ tirées de la littérature générale, PAS vérifiées espèce par espèce sur FishBase (les vraies valeurs varient significativement selon l'étude/la population — voir planning/discrepancies.md). À corriger avant de faire confiance aux poids calculés pour de vraies décisions. Une classe absente d'ici (ex: NA_Fish_Dataset, un dossier parasite du dataset) renvoie simplement poidsEstimeKg: null.",
-  "Black Sea Sprat": { "nom_fr": "Sprat", "poids_kg": 0.05, "a": 0.0056, "b": 3.13 },
-  "Gilt-Head Bream": { "nom_fr": "Dorade royale", "poids_kg": 1.0, "a": 0.0197, "b": 3.00 },
-  "Hourse Mackerel": { "nom_fr": "Chinchard", "poids_kg": 0.3, "a": 0.0068, "b": 3.13 },
-  "Red Mullet": { "nom_fr": "Rouget de vase", "poids_kg": 0.15, "a": 0.0085, "b": 3.07 },
-  "Red Sea Bream": { "nom_fr": "Pageot rose", "poids_kg": 0.5, "a": 0.0180, "b": 3.00 },
-  "Sea Bass": { "nom_fr": "Bar", "poids_kg": 1.2, "a": 0.0085, "b": 3.05 },
-  "Shrimp": { "nom_fr": "Crevette", "poids_kg": 0.02 },
-  "Striped Red Mullet": { "nom_fr": "Surmulet", "poids_kg": 0.2, "a": 0.0090, "b": 3.05 },
-  "Trout": { "nom_fr": "Truite", "poids_kg": 0.3, "a": 0.0107, "b": 3.02 }
+  "_readme": "Clé = classe EXACTE renvoyée par le modèle (labels.json), c'est-à-dire le nom du sous-dossier utilisé dans data/<espèce>/ par download_gbif.py (torchvision ImageFolder trie les classes par nom de dossier — garder ces clés synchronisées avec SPECIES_QUERIES dans download_gbif.py si la liste change). nom_fr = nom affiché au pêcheur. poids_kg = poids TYPIQUE utilisé par identifyPhoto() quand aucune longueur n'est mesurée (voir planning/discrepancies.md § Weight Estimation Method) — valeurs de départ approximatives, à corriger avec vos propres observations réelles. a/b = coefficients de la relation taille-poids allométrique W(g) = a × L(cm)^b, utilisés par estimateWeightFromLength() (ex: app compagnon avec mesure de longueur réelle) — ATTENTION : ce sont des valeurs de départ tirées de la littérature générale par famille, PAS vérifiées espèce par espèce sur FishBase (voir planning/discrepancies.md § Allometry coefficients). Deux classes (Capitaine, Thon) regroupent plusieurs espèces de tailles adultes très différentes (ex: Galeoides decadactylus vs Polydactylus quadrifilis pour Capitaine) — poids_kg y est un compromis grossier, encore moins fiable que pour les autres classes. Crevette n'est pas un poisson : pas de coefficients a/b (poids individuel moyen seulement).",
+  "Ethmalose": { "nom_fr": "Ethmalose (bonga)", "poids_kg": 0.08, "a": 0.0060, "b": 3.00 },
+  "Otolithe senegalais": { "nom_fr": "Otolithe sénégalais (courbine)", "poids_kg": 0.5, "a": 0.0100, "b": 3.00 },
+  "Machoiron": { "nom_fr": "Mâchoiron", "poids_kg": 0.8, "a": 0.0080, "b": 3.00 },
+  "Capitaine": { "nom_fr": "Capitaine", "poids_kg": 1.5, "a": 0.0090, "b": 3.05 },
+  "Carpe rouge Pagre": { "nom_fr": "Carpe rouge / Pagre", "poids_kg": 1.0, "a": 0.0180, "b": 3.00 },
+  "Bar barracuda": { "nom_fr": "Bar barracuda", "poids_kg": 1.5, "a": 0.0025, "b": 3.05 },
+  "Thiof Merou": { "nom_fr": "Thiof / Mérou", "poids_kg": 2.0, "a": 0.0140, "b": 3.05 },
+  "Carangue": { "nom_fr": "Carangue", "poids_kg": 1.0, "a": 0.0140, "b": 3.00 },
+  "Sole": { "nom_fr": "Sole", "poids_kg": 0.2, "a": 0.0060, "b": 3.00 },
+  "Thon": { "nom_fr": "Thon", "poids_kg": 3.0, "a": 0.0200, "b": 2.95 },
+  "Crevette": { "nom_fr": "Crevette", "poids_kg": 0.03 },
+  "Sardinelle": { "nom_fr": "Sardinelle", "poids_kg": 0.1, "a": 0.0060, "b": 3.05 }
 }
