@@ -56,6 +56,42 @@ Mâchoiron, Carangue notamment) — normal vu la disponibilité réelle des
 photos pour ces espèces en Afrique sur GBIF, voir
 `planning/discrepancies.md`.
 
+**Source complémentaire : Wikimedia Commons.** `download_wikimedia.py`
+ajoute des photos supplémentaires (mêmes dossiers `data/<espèce>/`)
+depuis les catégories Commons correspondantes — licences généralement
+meilleures (CC0, domaine public, CC BY, en plus de CC BY-SA), toutes
+exigent l'attribution (voir `attribution_wikimedia.json` par espèce,
+séparé de celui de GBIF). **Important :** ce script demande des
+miniatures (400px, `iiurlwidth`) plutôt que les images originales —
+demander les originaux en rafale déclenche un blocage 429 de
+Wikimedia, qui indique explicitement d'utiliser des miniatures pour un
+accès automatisé en volume. 400px est largement suffisant pour
+l'entraînement (`INPUT_SIZE = 224`).
+
+```bash
+python download_gbif.py --out data --max-per-species 150
+python download_wikimedia.py --out data
+```
+
+Avant d'entraîner, vérifiez aussi qu'aucune image n'est corrompue :
+
+```bash
+python -c "
+import os
+from PIL import Image
+for root, _, files in os.walk('data'):
+    for fn in files:
+        if fn.lower().endswith(('.jpg', '.jpeg', '.png')):
+            path = os.path.join(root, fn)
+            try:
+                with Image.open(path) as im:
+                    im.verify()
+            except Exception as e:
+                print('invalide, supprimé:', path, e)
+                os.remove(path)
+"
+```
+
 ## Entraînement
 
 ```bash
