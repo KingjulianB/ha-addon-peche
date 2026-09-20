@@ -125,21 +125,31 @@
         <div class="nemo" id="hNemo"><span class="dot"></span><span id="nemoTxt">NEMO —</span></div>
       </div>
     </header>
+  </div>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="journal">Journal</button>
-      <button class="tab" data-tab="carte">Carte &amp; carburant</button>
-      <button class="tab" data-tab="controle">Contrôle</button>
-      <button class="tab" data-tab="depenses">Dépenses</button>
-      <button class="tab" data-tab="pannes">Pannes</button>
-      <button class="tab" data-tab="tresorerie">Trésorerie</button>
-      <button class="tab" data-tab="equipe">Équipe &amp; pirogues</button>
-      <button class="tab" data-tab="bilan">Bilan</button>
-      <button class="tab" data-tab="entreprises">Entreprises</button>
-      <button class="tab" data-tab="saisie">Nouvelle sortie</button>
-      <button class="tab" data-tab="reglages">Réglages</button>
-    </nav>
+  <!-- Barre de nav pleine largeur (sticky + flou, voir plan Phase 2) :
+       .shell à l'intérieur réaligne juste les onglets sur la même colonne
+       que le reste du contenu, sans combiner les deux classes sur un même
+       élément (leurs "padding" en shorthand s'écraseraient sinon). -->
+  <div class="tabs-bar">
+    <div class="shell">
+      <nav class="tabs">
+        <button class="tab active" data-tab="journal">Journal</button>
+        <button class="tab" data-tab="carte">Carte &amp; carburant</button>
+        <button class="tab" data-tab="controle">Contrôle</button>
+        <button class="tab" data-tab="depenses">Dépenses</button>
+        <button class="tab" data-tab="pannes">Pannes</button>
+        <button class="tab" data-tab="tresorerie">Trésorerie</button>
+        <button class="tab" data-tab="equipe">Équipe &amp; pirogues</button>
+        <button class="tab" data-tab="bilan">Bilan</button>
+        <button class="tab" data-tab="entreprises">Entreprises</button>
+        <button class="tab" data-tab="saisie">Nouvelle sortie</button>
+        <button class="tab" data-tab="reglages">Réglages</button>
+      </nav>
+    </div>
+  </div>
 
+  <div class="shell">
     <main id="view"></main>
   </div>
 </div>

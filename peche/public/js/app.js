@@ -315,7 +315,7 @@
       uInfo.style.cssText = "font-size:11.5px;color:var(--ink-faint);margin-top:5px";
       el("hNemo").parentElement.appendChild(uInfo);
     }
-    uInfo.innerHTML = `${esc(state.user.username)} (${state.user.role === "admin" ? "admin" : "pêcheur"}) · <button id="themeBtn" style="background:none;border:none;color:var(--lagoon);cursor:pointer;font-size:11.5px;padding:0;text-decoration:underline">${isDark() ? "☀ mode clair" : "🌙 mode sombre"}</button> · <button id="logoutBtn" style="background:none;border:none;color:var(--lagoon);cursor:pointer;font-size:11.5px;padding:0;text-decoration:underline">déconnexion</button>`;
+    uInfo.innerHTML = `${esc(state.user.username)} (${state.user.role === "admin" ? "admin" : "pêcheur"}) · <button id="themeBtn" class="text-link sm">${isDark() ? "☀ mode clair" : "🌙 mode sombre"}</button> · <button id="logoutBtn" class="text-link sm">déconnexion</button>`;
     el("themeBtn").addEventListener("click", toggleTheme);
     el("logoutBtn").addEventListener("click", async () => {
       await API.logout().catch(() => {});
@@ -398,7 +398,7 @@
                   <span class="tot num">${fcfa((+p.kg) * (+p.prix))}</span>
                 </div>`).join("")}
             </div>
-            ${last.photo ? `<img src="${API.photoUrl(last.photo)}" alt="photo des prises" loading="lazy" style="margin-top:14px;max-width:220px;border-radius:4px;border:1px solid var(--line)">` : ""}
+            ${last.photo ? `<img src="${API.photoUrl(last.photo)}" alt="photo des prises" loading="lazy" style="margin-top:14px;max-width:220px;border-radius:var(--radius-sm);border:1px solid var(--line)">` : ""}
             ${isAdmin()
               ? `<div style="margin-top:14px;display:flex;gap:8px">
                    <button class="btn ghost small" data-edit="${last.id}">Modifier</button>
@@ -500,7 +500,7 @@
              <div class="catch-row" style="font-weight:600"><span class="esp">Marge nette</span><span class="tot num" style="color:${(tripCA(t) - t.depenses) >= 0 ? "var(--lagoon)" : "var(--signal)"}">${fcfa(tripCA(t) - t.depenses)} FCFA</span></div>
            </div>`
         : ""}
-      ${t.photo ? `<img src="${API.photoUrl(t.photo)}" alt="photo des prises" loading="lazy" style="margin-top:12px;max-width:220px;border-radius:4px;border:1px solid var(--line)">` : ""}
+      ${t.photo ? `<img src="${API.photoUrl(t.photo)}" alt="photo des prises" loading="lazy" style="margin-top:12px;max-width:220px;border-radius:var(--radius-sm);border:1px solid var(--line)">` : ""}
       ${isAdmin()
         ? `<div style="margin-top:12px;display:flex;gap:8px">
              <button class="btn ghost small" data-edit="${t.id}">Modifier</button>
@@ -632,7 +632,7 @@
           <div class="kpi"><div class="fr v num">${tr && dur ? kg1(dur) : "–"}<small>h</small></div><div class="l">Durée en mer</div></div>
           <div class="kpi"><div class="fr v num">${tr ? tr.points.length : "–"}</div><div class="l">Points GPS</div></div>
         </div>
-        <div id="map" style="height:440px;border-radius:2px;border:1px solid var(--line)"></div>
+        <div id="map" style="height:440px;border-radius:var(--radius-sm);border:1px solid var(--line)"></div>
         <div class="legend">
           <span><span class="sw" style="background:#c55a11"></span>Trajet</span>
           <span><span class="sw dot" style="background:#0d5c4a"></span>Départ</span>
@@ -824,7 +824,7 @@
         <h2 class="fr">Dépenses</h2>
         <p class="lead">Suivi des dépenses (réservé à l'administratrice). Reliez le carburant et la paye à une sortie pour calculer sa marge nette.</p>
 
-        <div style="border:1px solid var(--line);border-radius:2px;padding:16px;margin-bottom:20px">
+        <div class="card">
           <label>Type de dépense</label>
           <select id="d-type">
             <option value="carburant">Carburant (avant le voyage)</option>
@@ -1012,7 +1012,7 @@
         <h2 class="fr">Pannes & réparations</h2>
         <p class="lead">Constats de panne avec photos. Le coût de réparation s'ajoute automatiquement aux dépenses.</p>
 
-        <div style="border:1px solid var(--line);border-radius:2px;padding:16px;margin-bottom:20px">
+        <div class="card">
           <label>Titre de la panne</label>
           <input type="text" id="p-titre" placeholder="ex : Moteur hors-bord — démarrage">
           <div class="two">
@@ -1040,7 +1040,7 @@
       files.forEach((f) => compressImage(f, (dataUrl) => {
         pannePhotos.push(dataUrl);
         const img = document.createElement("img");
-        img.src = dataUrl; img.style.cssText = "width:70px;height:70px;object-fit:cover;border-radius:4px;border:1px solid var(--line)";
+        img.src = dataUrl; img.style.cssText = "width:70px;height:70px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--line)";
         box.appendChild(img);
       }));
     });
@@ -1053,7 +1053,7 @@
     const items = state.pannes.slice();
     if (!items.length) { list.innerHTML = `<div class="empty">Aucune panne enregistrée.</div>`; return; }
     list.innerHTML = items.map((p) => `
-      <div class="entry" style="border:1px solid var(--line);border-radius:2px;padding:12px;margin-bottom:10px">
+      <div class="entry" style="margin-bottom:10px;padding:12px">
         <div style="display:flex;justify-content:space-between;align-items:baseline">
           <span style="font-weight:600">${esc(p.titre)}</span>
           <span class="num muted" style="font-size:12.5px">${frDate(p.date)}</span>
@@ -1063,7 +1063,7 @@
           ${p.cout > 0 ? `<span class="badge sold">${fcfa(p.cout)} FCFA</span>` : ""}
         </div>
         ${p.constat ? `<p class="muted" style="font-size:13px;margin:6px 0">${esc(p.constat)}</p>` : ""}
-        ${(p.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${p.photos.map((ph) => `<img src="${API.photoUrl(ph)}" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:4px;border:1px solid var(--line)">`).join("")}</div>` : ""}
+        ${(p.photos || []).length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0">${p.photos.map((ph) => `<img src="${API.photoUrl(ph)}" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--line)">`).join("")}</div>` : ""}
         <div style="display:flex;gap:8px;margin-top:8px">
           ${p.statut !== "reparee" ? `<button class="btn ghost small" data-repare="${p.id}">Marquer réparée</button>` : ""}
           <button class="btn ghost small" data-delpanne="${p.id}" style="color:var(--signal);border-color:var(--signal)">Supprimer</button>
@@ -1112,7 +1112,7 @@
         <h2 class="fr" style="margin:0 0 4px">Trésorerie</h2>
         <p class="lead">Solde disponible = recettes des ventes − total des dépenses.</p>
 
-        <div style="border:2px solid ${soldeColor};border-radius:4px;padding:22px;text-align:center;margin:16px 0">
+        <div style="border:2px solid ${soldeColor};border-radius:var(--radius-sm);padding:22px;text-align:center;margin:16px 0">
           <div class="fr num" style="font-size:40px;line-height:1;color:${soldeColor}">${fcfa(t.solde)}<span style="font-size:16px;color:var(--ink-faint);margin-left:6px">FCFA</span></div>
           <div class="muted" style="font-size:13px;margin-top:6px">Solde en caisse</div>
         </div>
@@ -1175,7 +1175,7 @@
     const suspendu = e.statut === "suspendu";
     const verifie = e.admin_verifie === 1;
     const open = pirogues !== null;
-    return `<div class="entry" style="border:1px solid var(--line);border-radius:2px;padding:14px;margin-bottom:10px">
+    return `<div class="entry">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
         <span style="font-weight:600;font-size:15px">${esc(e.nom)}</span>
         <span class="badge ${suspendu ? "out" : "in"}">${suspendu ? "Suspendue" : "Active"}</span>
@@ -1245,7 +1245,7 @@
         <h2 class="fr">Équipe & pirogues</h2>
         <p class="lead">Gérez vos pirogues et invitez vos pêcheurs avec un code.</p>
 
-        <div style="border:1px solid var(--line);border-radius:2px;padding:16px;margin-bottom:22px">
+        <div class="card" style="margin-bottom:22px">
           <h3 style="margin:0 0 10px;font-size:14px;color:var(--navy)">Pirogues</h3>
           <div id="pir-list">${pirogues.map(pirRow).join("") || '<p class="muted" style="font-size:13px">Aucune pirogue. Ajoutez-en une.</p>'}</div>
           <div style="display:flex;gap:8px;margin-top:12px">
@@ -1254,7 +1254,7 @@
           </div>
         </div>
 
-        <div style="border:1px solid var(--line);border-radius:2px;padding:16px">
+        <div class="card" style="margin-bottom:0">
           <h3 style="margin:0 0 6px;font-size:14px;color:var(--navy)">Inviter un pêcheur</h3>
           <p class="hint" style="margin:0 0 12px">Générez un code, communiquez-le à votre pêcheur (WhatsApp, de vive voix). Il crée son compte via « Rejoindre une entreprise » sur la page d'accueil.</p>
           <button class="btn" id="inv-add" style="margin:0">Générer un code d'invitation</button>
@@ -1386,7 +1386,7 @@
       compressImage(f, (dataUrl) => {
         pendingPhoto = dataUrl;
         lastIdentification = null; // nouvelle photo : l'ancienne proposition ne s'applique plus
-        el("s-photo-preview").innerHTML = `<img src="${dataUrl}" alt="aperçu" style="max-width:180px;border-radius:4px;border:1px solid var(--line)">`;
+        el("s-photo-preview").innerHTML = `<img src="${dataUrl}" alt="aperçu" style="max-width:180px;border-radius:var(--radius-sm);border:1px solid var(--line)">`;
         const btn = el("s-identify-btn");
         if (btn) { btn.disabled = false; el("s-identify-result").innerHTML = ""; }
       });
