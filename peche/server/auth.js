@@ -14,6 +14,40 @@ export function verifyPassword(pw, stored) {
   const ref = Buffer.from(hash, "hex");
   return test.length === ref.length && timingSafeEqual(test, ref);
 }
+// Hash factice, calculé une fois au démarrage : sert à faire tourner un scrypt
+// même quand l'email est inconnu, pour que la réponse de /api/login prenne un
+// temps comparable que le compte existe ou non (anti-énumération d'emails).
+export const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(16).toString("hex"));
+
+// --- Jetons photo (à durée de vie courte) ---
+// Les balises <img> ne peuvent pas envoyer d'en-tête Authorization, donc le
+// jeton passe en paramètre d'URL (?t=). Réutiliser le jeton de session complet
+// pour ça l'expose dans les logs/l'historique du navigateur : une fuite donne
+// alors accès à tout le compte. On émet donc un jeton dédié, à portée réduite
+// (seulement vérifiable par getPhotoSession, jamais par getSession) et à
+// durée de vie courte, sans changer le comportement des balises <img>.
+const PHOTO_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 min
+const photoTokens = new Map();
+export function createPhotoToken(user) {
+  if (photoTokens.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of photoTokens) if (v.expiresAt < now) photoTokens.delete(k);
+  }
+  const token = randomBytes(16).toString("hex");
+  photoTokens.set(token, {
+    id: user.id, username: user.username, email: user.email,
+    role: user.role, entreprise_id: user.entreprise_id || null,
+    expiresAt: Date.now() + PHOTO_TOKEN_TTL_MS,
+  });
+  return token;
+}
+export function getPhotoSession(token) {
+  if (!token) return null;
+  const entry = photoTokens.get(token);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) { photoTokens.delete(token); return null; }
+  return entry;
+}
 
 // --- Sessions en mémoire (token -> {username, role}) ---
 // Suffisant pour un usage à 2 comptes. Les sessions repartent à zéro si

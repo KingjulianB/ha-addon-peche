@@ -19,6 +19,21 @@ const API = (() => {
   })();
 
   let token = store.get();
+  let photoToken = "";
+
+  // Récupère un jeton photo à portée réduite (voir /api/photo-token) pour ne
+  // pas exposer le jeton de session complet dans les URLs d'images. En cas
+  // d'échec (ancien serveur, réseau...), photoUrl() se replie sur `token`
+  // comme avant : aucune régression fonctionnelle.
+  async function refreshPhotoToken() {
+    if (!token) { photoToken = ""; return; }
+    try {
+      const r = await req("GET", "/api/photo-token");
+      if (r && r.token) photoToken = r.token;
+    } catch {}
+  }
+  if (token) refreshPhotoToken();
+  setInterval(() => { if (token) refreshPhotoToken(); }, 8 * 60 * 1000);
 
   async function req(method, path, body) {
     const opt = { method, credentials: "same-origin", headers: {} };
@@ -40,7 +55,7 @@ const API = (() => {
   return {
     login: async (username, password) => {
       const r = await req("POST", "/api/login", { email: username, password });
-      if (r && r.token) { token = r.token; store.set(token); }
+      if (r && r.token) { token = r.token; store.set(token); refreshPhotoToken(); }
       return r;
     },
     register: (entreprise, email, password) => req("POST", "/api/register", { entreprise, email, password }),
@@ -59,7 +74,7 @@ const API = (() => {
     join: (code, email, password) => req("POST", "/api/join", { code, email, password }),
     async logout() {
       try { await req("POST", "/api/logout"); } finally {
-        token = ""; store.clear();
+        token = ""; store.clear(); photoToken = "";
       }
     },
     me: () => req("GET", "/api/me"),
@@ -96,7 +111,10 @@ const API = (() => {
 
     // Pour les images : on ne peut pas mettre d'en-tête sur une balise <img>,
     // donc on expose le token en query pour l'URL des photos.
-    photoUrl: (ref) => `/api/photo?ref=${encodeURIComponent(ref)}${token ? "&t=" + encodeURIComponent(token) : ""}`,
+    photoUrl: (ref) => {
+      const t = photoToken || token;
+      return `/api/photo?ref=${encodeURIComponent(ref)}${t ? "&t=" + encodeURIComponent(t) : ""}`;
+    },
     getToken: () => token,
   };
 })();

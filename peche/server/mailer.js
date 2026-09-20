@@ -160,6 +160,54 @@ export async function sendPasswordReset(email, token) {
   }
 }
 
+/**
+ * Envoie l'alerte "pirogue proche du débarquement" (voir
+ * server/proximity-alert.js). Renvoie { sent: bool }.
+ * Si SMTP non configuré : journalise seulement (pas de lien à fournir,
+ * contrairement aux autres emails — rien à faire manuellement).
+ */
+export async function sendProximityAlert(to, { distanceKm, point }) {
+  const distTxt = distanceKm != null ? `${distanceKm.toFixed(1)} km` : "position inconnue";
+  const heure = point && point.t ? new Date(point.t).toLocaleString("fr-FR") : "";
+  if (!smtpConfigured()) {
+    console.log(`[MAIL simulé] Pirogue proche du débarquement (${distTxt}${heure ? ", " + heure : ""}) — destinataire : ${to}`);
+    return { sent: false };
+  }
+  try {
+    const t = getTransporter();
+    const attachments = [];
+    let logoTag = "";
+    if (existsSync(LOGO_PATH)) {
+      attachments.push({ filename: "fisher-link.png", path: LOGO_PATH, cid: "logofl" });
+      logoTag = `<img src="cid:logofl" width="72" height="72" alt="Fisher Link" style="display:block;margin:0 auto 12px;border-radius:14px">`;
+    }
+    const html = `
+      <div style="max-width:480px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#1a1d1a"><meta charset="utf-8">
+        <div style="text-align:center;padding:24px 0 8px">
+          ${logoTag}
+          <div style="font-size:22px;font-weight:700;color:#12395f">Fisher Link</div>
+          <div style="font-size:13px;color:#888">Journal de bord & gestion de pêche</div>
+        </div>
+        <div style="background:#f6f4ef;border-radius:8px;padding:24px;margin-top:12px">
+          <p>La pirogue est repérée à environ <b>${distTxt}</b> du point de débarquement${heure ? `, à ${escapeHtml(heure)}` : ""}.</p>
+          <p style="font-size:12px;color:#888">Position issue de la balise NEMO. Ajustez le rayon de déclenchement dans Réglages si besoin.</p>
+        </div>
+      </div>`;
+    await t.sendMail({
+      from: FROM, to,
+      subject: "Fisher Link — Pirogue proche du débarquement",
+      text: `La pirogue est repérée à environ ${distTxt} du point de débarquement${heure ? `, à ${heure}` : ""}.`,
+      html, attachments,
+      encoding: "utf-8",
+      textEncoding: "base64",
+    });
+    return { sent: true };
+  } catch (e) {
+    console.warn("Envoi de l'alerte de proximité échoué :", e.message);
+    return { sent: false, error: e.message };
+  }
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }

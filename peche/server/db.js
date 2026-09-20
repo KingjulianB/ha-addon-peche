@@ -74,6 +74,23 @@ CREATE TABLE IF NOT EXISTS pannes (
   expense_id  TEXT,                  -- dépense créée automatiquement
   created_at  INTEGER NOT NULL
 );
+
+-- Boucle de correction pour l'identification automatique (voir ml/README.md) :
+-- chaque fois qu'une photo passe par /api/identify-photo ET que le débarquement
+-- est enregistré, on garde une trace (espèce proposée vs espèce finalement
+-- saisie par le pêcheur) pour pouvoir réentraîner sur de vraies photos
+-- gabonaises plus tard (voir server/export-training-feedback.js).
+CREATE TABLE IF NOT EXISTS training_feedback (
+  id                TEXT PRIMARY KEY,
+  entreprise_id     TEXT,
+  trip_id           TEXT,
+  photo             TEXT NOT NULL,   -- même référence que trips.photo (nc: ou locale)
+  espece_predite    TEXT,            -- classe brute renvoyée par identifyPhoto()
+  confiance_predite REAL,
+  espece_confirmee  TEXT NOT NULL,   -- texte final saisi par le pêcheur (libre)
+  corrige           INTEGER NOT NULL,-- 1 si différent de la proposition, 0 sinon
+  created_at        INTEGER NOT NULL
+);
 `);
 
 function ensureColumn(table, col, def) {
@@ -176,6 +193,10 @@ const DEFAULTS = {
   zone_lat: "-0.72", zone_lon: "8.78", zone_radius: "15", map_span: "60",
   crew: JSON.stringify(["Ndong", "Mavoungou", "Ekomi", "Boussougou"]),
   boat_id: "GA-PG-2214",
+  // Alerte "pirogue proche du débarquement" (voir server/proximity-alert.js) :
+  // rayon plus petit que zone_radius (qui couvre toute la zone de pêche).
+  alerte_debarquement_km: "3",
+  alerte_email: "",
 };
 for (const [k, v] of Object.entries(DEFAULTS)) seedSettings.run(k, v);
 
@@ -255,11 +276,17 @@ export const Settings = {
 export const Expenses = {
   all: db.prepare("SELECT * FROM expenses ORDER BY date DESC, created_at DESC"),
   allByEnt: db.prepare("SELECT * FROM expenses WHERE entreprise_id = ? ORDER BY date DESC, created_at DESC"),
-  byTrip: db.prepare("SELECT * FROM expenses WHERE trip_id = ?"),
+  byTrip: db.prepare("SELECT * FROM expenses WHERE trip_id = ? AND entreprise_id = ?"),
   one: db.prepare("SELECT * FROM expenses WHERE id = ?"),
   insert: db.prepare(`INSERT INTO expenses (id,date,type,label,amount,trip_id,entreprise_id,created_at)
                       VALUES (@id,@date,@type,@label,@amount,@trip_id,@entreprise_id,@created_at)`),
   del: db.prepare("DELETE FROM expenses WHERE id = ?"),
+};
+
+export const TrainingFeedback = {
+  all: db.prepare("SELECT * FROM training_feedback ORDER BY created_at DESC"),
+  insert: db.prepare(`INSERT INTO training_feedback (id,entreprise_id,trip_id,photo,espece_predite,confiance_predite,espece_confirmee,corrige,created_at)
+                      VALUES (@id,@entreprise_id,@trip_id,@photo,@espece_predite,@confiance_predite,@espece_confirmee,@corrige,@created_at)`),
 };
 
 export const Pannes = {

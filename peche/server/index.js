@@ -1,17 +1,18 @@
 import express from "express";
 import { fileURLToPath } from "node:url";
 import { dirname, join, extname } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomInt } from "node:crypto";
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 
-import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, defaultEntrepriseId, db } from "./db.js";
+import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, TrainingFeedback, defaultEntrepriseId, db } from "./db.js";
 import { trackDistanceKm, trackDurationH } from "./geo.js";
 import { nemoConfigured, fetchNemoTrack } from "./nemo.js";
+import { startProximityWatcher } from "./proximity-alert.js";
 import { fishIdConfigured, identifyPhoto, estimateWeightFromLength } from "./fishid.js";
 import { nextcloudConfigured, uploadPhoto, downloadPhoto } from "./nextcloud.js";
 import {
   ensureAdminAccount, createUser, verifyPassword, createSession, getSession, destroySession, hashPassword,
-  createResetToken, resetPasswordWithToken,
+  createResetToken, resetPasswordWithToken, DUMMY_PASSWORD_HASH, createPhotoToken, getPhotoSession,
 } from "./auth.js";
 import { sendVerification, smtpConfigured, sendPasswordReset } from "./mailer.js";
 
@@ -21,7 +22,10 @@ const PORT = process.env.PORT || 3000;
 
 // Derrière le tunnel Cloudflare / proxy HA : faire confiance aux en-têtes
 // X-Forwarded-* pour détecter le HTTPS et fixer le cookie correctement.
-app.set("trust proxy", true);
+// "1" = on ne fait confiance qu'au premier saut (le tunnel/proxy immédiat) :
+// un client qui se connecte directement ne peut pas usurper X-Forwarded-For
+// pour obtenir une IP différente à chaque requête et contourner l'anti-bruteforce.
+app.set("trust proxy", 1);
 
 // Dossier des photos (dans /data pour être persistant + sauvegardé par HA)
 const DB_PATH = process.env.DB_PATH || "./data/peche.db";
@@ -91,12 +95,40 @@ function isSuperAdmin(user) {
   return user && user.email && SUPERADMIN_EMAILS.includes(user.email.toLowerCase());
 }
 
-app.post("/api/login", (req, res) => {
+// --- Anti-bruteforce léger (par IP), sans dépendance externe ---
+// Protège les routes sensibles non authentifiées (connexion, inscription,
+// mot de passe oublié, code d'invitation) contre les scripts automatisés :
+// devinette de mot de passe, énumération d'emails, brute-force de codes.
+const rateBuckets = new Map();
+function rateLimit(max, windowMs) {
+  return (req, res, next) => {
+    const key = req.ip || "?";
+    const now = Date.now();
+    // purge occasionnelle pour éviter une fuite mémoire sur un serveur longue durée
+    if (rateBuckets.size > 5000) {
+      for (const [k, b] of rateBuckets) if (b.resetAt < now) rateBuckets.delete(k);
+    }
+    let b = rateBuckets.get(key);
+    if (!b || b.resetAt < now) { b = { count: 0, resetAt: now + windowMs }; rateBuckets.set(key, b); }
+    b.count++;
+    if (b.count > max) return res.status(429).json({ error: "Trop de tentatives. Réessayez dans quelques minutes." });
+    next();
+  };
+}
+const authRateLimit = rateLimit(20, 15 * 60 * 1000); // 20 tentatives / 15 min / IP
+
+app.post("/api/login", authRateLimit, (req, res) => {
   const raw = (req.body?.email || req.body?.username || "").trim().toLowerCase();
   const password = req.body?.password || "";
   // Recherche par email, avec repli sur username (compat comptes existants)
   const user = Users.byEmail.get(raw) || Users.byName.get(raw);
-  if (!user || !verifyPassword(password, user.password)) {
+  if (!user) {
+    // Fait tourner un scrypt même sans compte trouvé, pour ne pas révéler
+    // par le temps de réponse qu'un email n'est pas enregistré.
+    verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return res.status(401).json({ error: "Email ou mot de passe incorrect." });
+  }
+  if (!verifyPassword(password, user.password)) {
     return res.status(401).json({ error: "Email ou mot de passe incorrect." });
   }
   if (user.actif === 0) {
@@ -124,7 +156,7 @@ app.post("/api/login", (req, res) => {
 });
 
 // --- Inscription d'une nouvelle entreprise (création ouverte) ---
-app.post("/api/register", async (req, res) => {
+app.post("/api/register", authRateLimit, async (req, res) => {
   const email = (req.body?.email || "").trim().toLowerCase();
   const password = req.body?.password || "";
   const nom = (req.body?.entreprise || "").trim();
@@ -160,7 +192,7 @@ app.get("/api/verify", (req, res) => {
 });
 
 // --- Mot de passe oublié : demande d'un lien de réinitialisation ---
-app.post("/api/forgot-password", async (req, res) => {
+app.post("/api/forgot-password", authRateLimit, async (req, res) => {
   const email = (req.body?.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "Email requis." });
   const user = Users.byEmail.get(email);
@@ -175,7 +207,7 @@ app.post("/api/forgot-password", async (req, res) => {
 });
 
 // --- Mot de passe oublié : validation du lien + nouveau mot de passe ---
-app.post("/api/reset-password", (req, res) => {
+app.post("/api/reset-password", authRateLimit, (req, res) => {
   const token = String(req.body?.token || "");
   const password = req.body?.password || "";
   if (!token) return res.status(400).json({ error: "Lien invalide." });
@@ -191,6 +223,12 @@ app.post("/api/logout", (req, res) => {
   destroySession(parseCookies(req).session);
   res.setHeader("Set-Cookie", "session=; HttpOnly; Path=/; Max-Age=0");
   res.json({ ok: true });
+});
+
+// Jeton courte-durée dédié aux URLs de photos (voir /api/photo) : évite de
+// mettre le jeton de session complet dans une URL (logs, historique...).
+app.get("/api/photo-token", requireAuth, (req, res) => {
+  res.json({ token: createPhotoToken(req.user) });
 });
 
 app.get("/api/me", (req, res) => {
@@ -258,7 +296,7 @@ app.delete("/api/pirogues/:id", requireAuth, requireAdmin, (req, res) => {
 function genCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sans I,O,0,1 (lisibilité)
   let c = "";
-  for (let i = 0; i < 6; i++) c += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 6; i++) c += chars[randomInt(chars.length)];
   return c;
 }
 app.get("/api/invitations", requireAuth, requireAdmin, (req, res) => {
@@ -278,7 +316,7 @@ app.delete("/api/invitations/:code", requireAuth, requireAdmin, (req, res) => {
 });
 
 // ---------- REJOINDRE UNE ENTREPRISE (pêcheur, public) ----------
-app.post("/api/join", (req, res) => {
+app.post("/api/join", authRateLimit, (req, res) => {
   const code = (req.body?.code || "").trim().toUpperCase();
   const email = (req.body?.email || "").trim().toLowerCase();
   const password = req.body?.password || "";
@@ -344,6 +382,28 @@ app.post("/api/trips", requireAuth, async (req, res) => {
     created_at: Date.now(),
   };
   Trips.insert.run(row);
+  // Boucle de correction pour l'identification automatique (bêta) : si cette
+  // photo est passée par /api/identify-photo, on garde la proposition et ce
+  // que le pêcheur a finalement saisi, pour pouvoir réentraîner plus tard sur
+  // de vraies photos gabonaises (voir server/export-training-feedback.js).
+  const idn = b.identification;
+  if (idn && idn.espece && b.prises[0] && b.prises[0].esp) {
+    try {
+      const confirmee = String(b.prises[0].esp).trim();
+      const proposee = String(idn.especeFr || idn.espece).trim();
+      TrainingFeedback.insert.run({
+        id: randomUUID(),
+        entreprise_id: entOf(req),
+        trip_id: row.id,
+        photo: photoRef,
+        espece_predite: String(idn.espece).trim(),
+        confiance_predite: typeof idn.confiance === "number" ? idn.confiance : null,
+        espece_confirmee: confirmee,
+        corrige: confirmee.toLowerCase() === proposee.toLowerCase() ? 0 : 1,
+        created_at: Date.now(),
+      });
+    } catch (e) { console.warn("training_feedback non enregistré :", e.message); }
+  }
   res.json(deserTrip(row, req.user.role === "admin"));
 });
 
@@ -387,8 +447,13 @@ app.get("/api/photo", async (req, res) => {
   let token = parseCookies(req).session;
   const auth = req.get("authorization") || "";
   if (!token && auth.startsWith("Bearer ")) token = auth.slice(7);
-  if (!token && req.query.t) token = String(req.query.t);
-  const sess = getSession(token);
+  // ?t= : d'abord un jeton photo à portée réduite (voir /api/photo-token),
+  // avec repli sur un jeton de session classique pour compatibilité.
+  let sess = getSession(token);
+  if (!sess && req.query.t) {
+    const qt = String(req.query.t);
+    sess = getPhotoSession(qt) || getSession(qt);
+  }
   if (!sess) return res.status(401).end();
 
   const ref = String(req.query.ref || "");
@@ -501,13 +566,23 @@ app.post("/api/expenses", requireAuth, requireAdmin, (req, res) => {
   if (!EXPENSE_TYPES.includes(b.type)) {
     return res.status(400).json({ error: "Type de dépense invalide." });
   }
+  let tripId = b.trip_id || null;
+  if (tripId) {
+    // Isolation : le lien optionnel vers une sortie doit pointer sur une
+    // sortie de la même entreprise, sinon une dépense pourrait se rattacher
+    // (et fausser la marge) d'une sortie appartenant à un autre tenant.
+    const trip = Trips.one.get(tripId);
+    if (!trip || !sameEnt(trip, req)) {
+      return res.status(400).json({ error: "Sortie invalide." });
+    }
+  }
   const row = {
     id: randomUUID(),
     date: b.date,
     type: b.type,
     label: (b.label || "").trim(),
     amount,
-    trip_id: b.trip_id || null,   // lien optionnel vers une sortie
+    trip_id: tripId,   // lien optionnel vers une sortie
     entreprise_id: entOf(req),
     created_at: Date.now(),
   };
@@ -772,7 +847,7 @@ function deserTrip(r, withExpenses) {
   }
   if (withExpenses) {
     // Dépenses liées (carburant, paye…) pour la marge nette — admin uniquement.
-    const exp = Expenses.byTrip.all(r.id);
+    const exp = Expenses.byTrip.all(r.id, r.entreprise_id);
     base.depenses = exp.reduce((s, e) => s + (e.amount || 0), 0);
     base.depenses_detail = exp;
   }
@@ -784,4 +859,5 @@ app.listen(PORT, () => {
   console.log(`\n  Pêche Port-Gentil — serveur démarré sur le port ${PORT}`);
   console.log(`  Comptes : admin + pecheur (mots de passe définis dans la config)`);
   console.log(`  NEMO : ${nemoConfigured() ? "configuré" : "non configuré (import manuel)"}\n`);
+  startProximityWatcher(); // alerte "pirogue proche du débarquement" — no-op tant que NEMO n'est pas configuré
 });

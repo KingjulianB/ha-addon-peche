@@ -1256,10 +1256,11 @@
   /* ================= SAISIE ================= */
   let pendingPhoto = null; // data URL de la photo choisie
   let pendingGps = null;   // {lat, lon} capturé
+  let lastIdentification = null; // dernière proposition de identifyCatchPhoto(), pour la boucle de correction
 
   function renderSaisie(v) {
     const crew = safeArr(state.settings.crew);
-    pendingPhoto = null; pendingGps = null;
+    pendingPhoto = null; pendingGps = null; lastIdentification = null;
     v.innerHTML = `
       <div class="form">
         <h2 class="fr">Nouveau débarquement</h2>
@@ -1291,7 +1292,8 @@
         <div id="s-photo-preview" style="margin-top:10px"></div>
         ${state.fishId ? `
         <button class="btn ghost small" id="s-identify-btn" style="margin-top:8px" disabled>Identifier l'espèce automatiquement (bêta)</button>
-        <div id="s-identify-result" style="margin-top:8px"></div>` : ""}
+        <div id="s-identify-result" style="margin-top:8px"></div>
+        <div class="hint" style="margin-top:4px">Si vous utilisez l'identification automatique, la photo et l'espèce que vous confirmez peuvent servir à améliorer le modèle.</div>` : ""}
 
         <label style="margin-top:16px">Position GPS du téléphone</label>
         <div id="s-gps" class="info-badge" style="margin-top:0">Position non capturée.</div>
@@ -1329,6 +1331,7 @@
       const f = e.target.files[0]; if (!f) return;
       compressImage(f, (dataUrl) => {
         pendingPhoto = dataUrl;
+        lastIdentification = null; // nouvelle photo : l'ancienne proposition ne s'applique plus
         el("s-photo-preview").innerHTML = `<img src="${dataUrl}" alt="aperçu" style="max-width:180px;border-radius:4px;border:1px solid var(--line)">`;
         const btn = el("s-identify-btn");
         if (btn) { btn.disabled = false; el("s-identify-result").innerHTML = ""; }
@@ -1399,6 +1402,7 @@
     box.innerHTML = `<span class="hint">Identification en cours…</span>`;
     try {
       const r = await API.identifyPhoto(pendingPhoto);
+      lastIdentification = { espece: r.espece, especeFr: r.especeFr, confiance: r.confiance };
       const pct = Math.round((r.confiance || 0) * 100);
       box.innerHTML = `
         <div class="info-badge">
@@ -1442,12 +1446,13 @@
       zone: el("s-zone").value.trim(), crew, prises,
       par: el("s-par").value.trim(), note: el("s-note").value.trim(),
       photo: pendingPhoto, gps: pendingGps,
+      identification: lastIdentification || null,
     };
     const btn = el("s-save"); btn.disabled = true; btn.textContent = "Enregistrement…";
     try {
       const saved = await API.addTrip(trip);
       state.trips.unshift(saved);
-      pendingPhoto = null; pendingGps = null;
+      pendingPhoto = null; pendingGps = null; lastIdentification = null;
       toast("Débarquement enregistré");
       document.querySelector('.tab[data-tab="journal"]').click();
     } catch (e) { w.hidden = false; w.textContent = e.message; btn.disabled = false; btn.textContent = "Enregistrer le débarquement"; }
@@ -1487,8 +1492,16 @@
         </div>
 
         <div class="divider"></div>
+        <label>Alerte "pirogue proche du débarquement"</label>
+        <p class="hint">Nécessite la balise NEMO (voir onglet Carte) — envoie un email dès qu'une pirogue entre dans ce rayon autour du centre de la zone de pêche ci-dessus.</p>
+        <div class="two">
+          <div><label>Rayon d'alerte (km)</label><input id="r-alerte-rad" type="number" step="0.5" value="${esc(s.alerte_debarquement_km || "3")}"></div>
+          <div><label>Email à prévenir</label><input id="r-alerte-email" type="email" placeholder="vous@exemple.com" value="${esc(s.alerte_email || "")}"></div>
+        </div>
+
+        <div class="divider"></div>
         <label>Équipage (un nom par ligne)</label>
-        <textarea id="r-crew" rows="4" style="font-family:inherit">${safeArr(s.crew).join("\n")}</textarea>
+        <textarea id="r-crew" rows="4" style="font-family:inherit">${safeArr(s.crew).map(esc).join("\n")}</textarea>
 
         <button class="btn" id="r-save">Enregistrer les réglages</button>
       </div>`;
@@ -1499,6 +1512,7 @@
         boat_id: el("r-boat").value.trim(),
         fuel_mode: el("r-mode").value, fuel_conso: el("r-conso").value, fuel_prix: el("r-prix").value,
         zone_lat: el("r-lat").value, zone_lon: el("r-lon").value, zone_radius: el("r-rad").value, map_span: el("r-span").value,
+        alerte_debarquement_km: el("r-alerte-rad").value, alerte_email: el("r-alerte-email").value.trim(),
         crew: JSON.stringify(crew),
       };
       try {
