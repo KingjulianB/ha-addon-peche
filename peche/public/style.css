@@ -1,12 +1,27 @@
 :root{
-  --ink:#1a1d1a; --ink-soft:#5c625b; --ink-faint:#8b918a;
-  --paper:#f6f4ef; --paper-shade:#eceae1; --line:#d4d7d0; --line-strong:#b9bdb6;
+  /* Neutres retravaillés (langage de design Apple) ; --lagoon/--signal
+     (identité de marque Fisher Link) volontairement inchangés. */
+  --ink:#1d1d1f; --ink-soft:#6e6e73; --ink-faint:#86868b;
+  --paper:#f5f5f7; --paper-shade:#e8e8ed; --line:#d2d2d7; --line-strong:#b8b8bd;
   --lagoon:#0d5c4a; --lagoon-dk:#0a4a3b; --signal:#a8321e;
+
+  /* Nouveaux tokens (Phase 0) : rayons, ombres, easing. Additifs — rien ne
+     les utilise encore hors des écrans retouchés en Phase 1. */
+  --radius-sm:10px; --radius-md:14px; --radius-lg:20px; --radius-pill:999px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 8px 24px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+  --shadow-lg:0 24px 60px rgba(0,0,0,.18), 0 8px 20px rgba(0,0,0,.08);
+  --ease-apple:cubic-bezier(.4,0,.2,1);
+  --ease-spring:cubic-bezier(.16,1,.3,1);
 }
 @media (prefers-color-scheme: dark){:root{
-  --ink:#e6ede4; --ink-soft:#a7b0a5; --ink-faint:#7c847b;
-  --paper:#12150f; --paper-shade:#1b1f18; --line:#2a2f26; --line-strong:#3a4034;
+  --ink:#f5f5f7; --ink-soft:#a1a1a6; --ink-faint:#6e6e73;
+  --paper:#000000; --paper-shade:#1c1c1e; --line:#38383a; --line-strong:#48484a;
   --lagoon:#3fae90; --lagoon-dk:#54c4a5; --signal:#e0765f;
+
+  --shadow-sm:0 1px 3px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md:0 8px 24px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4);
+  --shadow-lg:0 24px 60px rgba(0,0,0,.6), 0 8px 20px rgba(0,0,0,.4);
 }}
 *{box-sizing:border-box}
 [hidden]{display:none !important}
@@ -22,17 +37,48 @@ input:focus-visible{outline:2px solid var(--lagoon);outline-offset:1px}
 ::selection{background:color-mix(in srgb, var(--lagoon) 22%, transparent)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
-/* ---------- login ---------- */
+/* ---------- login (Phase 1 : langage de design Apple) ---------- */
 .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.login-card{width:100%;max-width:340px}
+.login-card{
+  width:100%;max-width:380px;background:var(--paper-shade);
+  border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);
+  padding:40px 36px;text-align:center;
+}
+.login-card .logo{margin-left:auto;margin-right:auto}
 .login-card .mark{color:var(--lagoon);font-size:18px}
-.login-card h1{font-size:26px;font-weight:460;margin:6px 0 2px}
-.login-card .sub{color:var(--ink-faint);font-size:13px;margin:0 0 26px}
-.login-card label{display:block;font-size:12.5px;color:var(--ink-faint);margin:0 0 6px}
-.login-card input{width:100%;padding:12px;border:1.5px solid var(--line-strong);border-radius:2px;background:var(--paper);color:var(--ink);font-size:16px}
-.login-card button{width:100%;margin-top:14px;padding:12px;background:var(--lagoon);color:var(--paper);font-weight:500;border-radius:2px}
+.login-card h1{font-size:28px;font-weight:600;letter-spacing:-0.015em;margin:14px 0 4px}
+.login-card .sub{color:var(--ink-faint);font-size:14px;margin:0 0 28px}
+.login-card label{display:block;font-size:12.5px;font-weight:500;color:var(--ink-faint);margin:0 0 6px;text-align:left}
+.login-card input{
+  width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:var(--radius-sm);
+  background:var(--paper);color:var(--ink);font-size:16px;
+  transition:border-color .18s var(--ease-apple), box-shadow .18s var(--ease-apple);
+}
+.login-card input:focus-visible{
+  outline:none;border-color:var(--lagoon);
+  box-shadow:0 0 0 4px color-mix(in srgb, var(--lagoon) 18%, transparent);
+}
+.login-card button{
+  width:100%;margin-top:18px;padding:13px;background:var(--lagoon);color:#fff;
+  font-weight:600;font-size:15px;border-radius:var(--radius-pill);
+  transition:background .18s var(--ease-apple), transform .12s var(--ease-apple);
+}
 .login-card button:hover{background:var(--lagoon-dk)}
+.login-card button:active{transform:scale(.98)}
+/* .text-link est aussi un <button> dans .login-card : il faut regagner en
+   spécificité sur ".login-card button" ci-dessus pour ne pas hériter du
+   style "gros bouton pilule vert". */
+.login-card button.text-link,.text-link{
+  width:auto;margin-top:0;padding:0;background:none;color:var(--lagoon);
+  font-weight:400;font-size:13px;border-radius:0;text-decoration:underline;
+}
+.login-card button.text-link:hover{background:none;color:var(--lagoon-dk)}
+.login-card button.text-link:active{transform:none}
+.login-p{text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)}
+.login-p.tight{margin-top:12px}
+.ok-box{margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:var(--radius-sm);font-size:13px}
 .err{color:var(--signal);font-size:13px;margin-top:12px}
+@media (prefers-reduced-motion:reduce){.login-card button:active{transform:none}}
 
 /* ---------- shell ---------- */
 .shell{margin:0 auto;max-width:1080px;padding:0 24px}

@@ -24,14 +24,14 @@
     <input id="pw" type="password" autocomplete="current-password" placeholder="••••••">
     <button id="loginBtn">Se connecter</button>
     <p id="loginErr" class="err" hidden></p>
-    <p style="text-align:center;margin-top:12px;font-size:13px">
-      <button id="goForgot" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Mot de passe oublié ?</button>
+    <p class="login-p tight">
+      <button id="goForgot" class="text-link">Mot de passe oublié ?</button>
     </p>
-    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">Pas encore de compte ?
-      <button id="goRegister" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Créer mon entreprise</button>
+    <p class="login-p">Pas encore de compte ?
+      <button id="goRegister" class="text-link">Créer mon entreprise</button>
     </p>
-    <p style="text-align:center;margin-top:8px;font-size:13px;color:var(--ink-faint)">Vous êtes pêcheur avec un code ?
-      <button id="goJoin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Rejoindre une entreprise</button>
+    <p class="login-p" style="margin-top:8px">Vous êtes pêcheur avec un code ?
+      <button id="goJoin" class="text-link">Rejoindre une entreprise</button>
     </p>
   </div>
 </div>
@@ -46,9 +46,9 @@
     <input id="f-email" type="email" autocomplete="email" placeholder="vous@exemple.com">
     <button id="forgotBtn">Envoyer le lien</button>
     <p id="forgotErr" class="err" hidden></p>
-    <div id="forgotOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
-    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">
-      <button id="forgotToLogin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Retour à la connexion</button>
+    <div id="forgotOk" hidden class="ok-box"></div>
+    <p class="login-p">
+      <button id="forgotToLogin" class="text-link">Retour à la connexion</button>
     </p>
   </div>
 </div>
@@ -63,7 +63,7 @@
     <input id="rp-pw" type="password" autocomplete="new-password" placeholder="6 caractères minimum">
     <button id="resetpwBtn">Valider</button>
     <p id="resetpwErr" class="err" hidden></p>
-    <div id="resetpwOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
+    <div id="resetpwOk" hidden class="ok-box"></div>
   </div>
 </div>
 
@@ -81,9 +81,9 @@
     <input id="j-pw" type="password" autocomplete="new-password" placeholder="6 caractères minimum">
     <button id="joinBtn">Rejoindre</button>
     <p id="joinErr" class="err" hidden></p>
-    <div id="joinOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
-    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">
-      <button id="joinToLogin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Retour à la connexion</button>
+    <div id="joinOk" hidden class="ok-box"></div>
+    <p class="login-p">
+      <button id="joinToLogin" class="text-link">Retour à la connexion</button>
     </p>
   </div>
 </div>
@@ -102,9 +102,9 @@
     <input id="r-pw" type="password" autocomplete="new-password" placeholder="6 caractères minimum">
     <button id="registerBtn">Créer mon entreprise</button>
     <p id="registerErr" class="err" hidden></p>
-    <div id="registerOk" hidden style="margin-top:14px;padding:12px;background:color-mix(in srgb,var(--lagoon) 8%,transparent);border:1px solid color-mix(in srgb,var(--lagoon) 30%,transparent);border-radius:4px;font-size:13px"></div>
-    <p style="text-align:center;margin-top:16px;font-size:13px;color:var(--ink-faint)">Déjà un compte ?
-      <button id="goLogin" style="background:none;border:none;color:var(--lagoon);cursor:pointer;text-decoration:underline;font-size:13px">Se connecter</button>
+    <div id="registerOk" hidden class="ok-box"></div>
+    <p class="login-p">Déjà un compte ?
+      <button id="goLogin" class="text-link">Se connecter</button>
     </p>
   </div>
 </div>
