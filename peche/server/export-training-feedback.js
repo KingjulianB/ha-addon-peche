@@ -18,7 +18,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { TrainingFeedback } from "./db.js";
 import { nextcloudConfigured, downloadPhoto } from "./nextcloud.js";
@@ -30,7 +30,7 @@ const ML_DATA_DIR = join(__dirname, "..", "ml", "data");
 const WEIGHTS_PATH = join(__dirname, "..", "ml", "species_weights.json");
 const LABELS_PATH = join(__dirname, "..", "ml", "labels.json");
 
-function loadClassMap() {
+export function loadClassMap() {
   // norm(texte confirmé) -> classe exacte (nom du dossier data/<classe>/)
   const map = new Map();
   const norm = (s) => String(s || "").trim().toLowerCase();
@@ -105,4 +105,10 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+// Ne s'exécute que lancé directement (`node server/export-training-feedback.js`),
+// jamais quand ce module est importé (voir test/export-training-feedback.test.js).
+// pathToFileURL (et non une simple concaténation "file://") pour rester correct
+// sous Windows, où process.argv[1] utilise des antislashs.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => { console.error(e); process.exit(1); });
+}

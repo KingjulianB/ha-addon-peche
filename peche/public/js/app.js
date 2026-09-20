@@ -3,7 +3,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const el = (id) => document.getElementById(id);
 
-  let state = { trips: [], tracks: [], settings: {}, curTrack: null, openId: null, nemo: false, fishId: false, user: null, expenses: [], pannes: [] };
+  let state = { trips: [], tracks: [], settings: {}, curTrack: null, openId: null, nemo: false, fishId: false, user: null, expenses: [], pannes: [], openEntId: null };
   const isAdmin = () => state.user && state.user.role === "admin";
 
   // --- Thème clair / sombre ---
@@ -1131,6 +1131,13 @@
     let list;
     try { list = await API.entreprises(); }
     catch (e) { v.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    // Panneau "Pirogues NEMO" d'une entreprise déplié (voir data-togglepir) :
+    // chargé à part, pour ne pas ralentir la liste principale des entreprises.
+    let openPirogues = null;
+    if (state.openEntId) {
+      try { openPirogues = await API.entreprisePirogues(state.openEntId); }
+      catch (e) { toast(e.message); state.openEntId = null; }
+    }
     const actives = list.filter((e) => e.statut === "actif").length;
     v.innerHTML = `
       <div class="map-wrap">
@@ -1138,7 +1145,7 @@
           <h2 class="fr" style="margin:0">Entreprises</h2>
           <p class="muted" style="font-size:13px;margin:4px 0 0">Gestion de la plateforme (réservé à l'éditeur). ${list.length} entreprise(s), ${actives} active(s).</p>
         </div>
-        <div id="ent-list">${list.map(entRow).join("") || '<div class="empty">Aucune entreprise.</div>'}</div>
+        <div id="ent-list">${list.map((e) => entRow(e, e.id === state.openEntId ? openPirogues : null)).join("") || '<div class="empty">Aucune entreprise.</div>'}</div>
       </div>`;
 
     v.querySelectorAll("[data-suspend]").forEach((b) => b.addEventListener("click", () => setStatut(b.dataset.suspend, "suspendu")));
@@ -1147,11 +1154,27 @@
       try { await API.verifierEntreprise(b.dataset.verifier); toast("Compte vérifié manuellement"); renderEntreprises(v); }
       catch (e) { toast(e.message); }
     }));
+    v.querySelectorAll("[data-togglepir]").forEach((b) => b.addEventListener("click", () => {
+      const id = b.dataset.togglepir;
+      state.openEntId = state.openEntId === id ? null : id;
+      renderEntreprises(v);
+    }));
+    v.querySelectorAll("[data-savenemo]").forEach((b) => b.addEventListener("click", async () => {
+      const pid = b.dataset.savenemo;
+      const body = {
+        nemo_api_url: el(`nemo-url-${pid}`).value.trim(),
+        nemo_api_key: el(`nemo-key-${pid}`).value, // laissé vide = on garde la clé déjà enregistrée
+        nemo_device_id: el(`nemo-dev-${pid}`).value.trim(),
+      };
+      try { await API.setPirogueNemo(state.openEntId, pid, body); toast("Config NEMO enregistrée"); renderEntreprises(v); }
+      catch (e) { toast(e.message); }
+    }));
   }
 
-  function entRow(e) {
+  function entRow(e, pirogues) {
     const suspendu = e.statut === "suspendu";
     const verifie = e.admin_verifie === 1;
+    const open = pirogues !== null;
     return `<div class="entry" style="border:1px solid var(--line);border-radius:2px;padding:14px;margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
         <span style="font-weight:600;font-size:15px">${esc(e.nom)}</span>
@@ -1170,7 +1193,38 @@
           : (suspendu
             ? `<button class="btn ghost small" data-activer="${e.id}">Réactiver</button>`
             : `<button class="btn ghost small" data-suspend="${e.id}" style="color:var(--signal);border-color:var(--signal)">Suspendre</button>`)}
+        <button class="btn ghost small" data-togglepir="${e.id}">${open ? "Masquer les pirogues" : "Pirogues NEMO"} ${open ? "▲" : "▾"}</button>
       </div>
+      ${open ? nemoPanel(pirogues) : ""}
+    </div>`;
+  }
+
+  // Config NEMO par pirogue (super-admin uniquement) : chaque pirogue d'une
+  // entreprise peut avoir sa propre balise. La clé API n'est jamais renvoyée
+  // par le serveur (nemo_api_key_set: bool) — un champ vide au moment
+  // d'enregistrer signifie "garder la clé déjà en place".
+  function nemoPanel(pirogues) {
+    if (!pirogues.length) {
+      return `<div class="muted" style="font-size:12.5px;margin-top:10px;border-top:1px solid var(--line);padding-top:10px">Aucune pirogue pour cette entreprise.</div>`;
+    }
+    return `<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:10px">${pirogues.map(nemoRow).join("")}</div>`;
+  }
+
+  function nemoRow(p) {
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--paper-shade)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-weight:600;font-size:13px">${esc(p.nom)}</span>
+        <span class="badge ${p.nemo_api_key_set ? "in" : "out"}" style="font-size:10px">${p.nemo_api_key_set ? "NEMO configurée" : "Non configurée"}</span>
+      </div>
+      <div class="two">
+        <div><label style="font-size:11px">URL API</label><input type="text" id="nemo-url-${p.id}" value="${esc(p.nemo_api_url || "")}" placeholder="https://..."></div>
+        <div><label style="font-size:11px">ID balise</label><input type="text" id="nemo-dev-${p.id}" value="${esc(p.nemo_device_id || "")}"></div>
+      </div>
+      <div style="margin-top:6px">
+        <label style="font-size:11px">Clé API</label>
+        <input type="password" id="nemo-key-${p.id}" placeholder="${p.nemo_api_key_set ? "•••••••• (laisser vide pour conserver)" : "Non configurée"}">
+      </div>
+      <button class="btn small ghost" data-savenemo="${p.id}" style="margin-top:8px">Enregistrer</button>
     </div>`;
   }
 

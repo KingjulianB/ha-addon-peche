@@ -1,5 +1,5 @@
 import express from "express";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, extname } from "node:path";
 import { randomUUID, randomInt } from "node:crypto";
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
@@ -10,6 +10,7 @@ import { nemoConfigured, fetchNemoTrack } from "./nemo.js";
 import { startProximityWatcher } from "./proximity-alert.js";
 import { fishIdConfigured, identifyPhoto, estimateWeightFromLength } from "./fishid.js";
 import { nextcloudConfigured, uploadPhoto, downloadPhoto } from "./nextcloud.js";
+import { encryptSecret } from "./secrets.js";
 import {
   ensureAdminAccount, createUser, verifyPassword, createSession, getSession, destroySession, hashPassword,
   createResetToken, resetPasswordWithToken, DUMMY_PASSWORD_HASH, createPhotoToken, getPhotoSession,
@@ -271,6 +272,31 @@ app.post("/api/entreprises/:id/verifier", requireAuth, requireSuperAdmin, (req, 
   const admin = db.prepare("SELECT id FROM users WHERE entreprise_id = ? AND role = 'admin' LIMIT 1").get(req.params.id);
   if (admin) Users.verify.run(admin.id);
   res.json({ ok: true });
+});
+
+// Config NEMO par pirogue : une entreprise peut avoir plusieurs pirogues,
+// chacune avec sa propre balise. Géré uniquement par le super-admin (pas
+// l'admin de l'entreprise) — voir planning. La clé API n'est JAMAIS
+// renvoyée en clair au navigateur (nemo_api_key_set: bool à la place),
+// même logique que nemoConfigured()/{configured} pour /api/nemo/status.
+app.get("/api/entreprises/:id/pirogues", requireAuth, requireSuperAdmin, (req, res) => {
+  const rows = Pirogues.byEnt.all(req.params.id).map((p) => ({
+    id: p.id, nom: p.nom, actif: p.actif,
+    nemo_api_url: p.nemo_api_url || "",
+    nemo_device_id: p.nemo_device_id || "",
+    nemo_api_key_set: Boolean(p.nemo_api_key_enc),
+  }));
+  res.json(rows);
+});
+app.put("/api/entreprises/:entId/pirogues/:pirogueId/nemo", requireAuth, requireSuperAdmin, (req, res) => {
+  const p = Pirogues.one.get(req.params.pirogueId);
+  if (!p || p.entreprise_id !== req.params.entId) return res.status(404).json({ error: "Pirogue introuvable." });
+  const b = req.body || {};
+  // Champ clé vide = on garde la clé déjà enregistrée (comme un champ de
+  // mot de passe classique) ; sinon on rechiffre la nouvelle valeur.
+  const apiKeyEnc = b.nemo_api_key ? encryptSecret(b.nemo_api_key) : p.nemo_api_key_enc;
+  Pirogues.setNemoConfig.run(b.nemo_api_url || "", apiKeyEnc, b.nemo_device_id || "", p.id);
+  res.json({ ok: true, nemo_api_key_set: Boolean(apiKeyEnc) });
 });
 
 // ---------- PIROGUES (admin de l'entreprise) ----------
@@ -855,9 +881,16 @@ function deserTrip(r, withExpenses) {
 }
 function safeParse(s, fb) { try { return JSON.parse(s); } catch { return fb; } }
 
-app.listen(PORT, () => {
-  console.log(`\n  Pêche Port-Gentil — serveur démarré sur le port ${PORT}`);
-  console.log(`  Comptes : admin + pecheur (mots de passe définis dans la config)`);
-  console.log(`  NEMO : ${nemoConfigured() ? "configuré" : "non configuré (import manuel)"}\n`);
-  startProximityWatcher(); // alerte "pirogue proche du débarquement" — no-op tant que NEMO n'est pas configuré
-});
+// Ne démarre le serveur que lancé directement (`node server/index.js`, ce
+// que fait run.sh) — jamais quand ce module est importé, ce qui permet aux
+// tests d'intégration (voir test/routes.test.js) d'utiliser `app` en process
+// et d'appeler app.listen() eux-mêmes, sur un port de leur choix.
+export default app;
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  app.listen(PORT, () => {
+    console.log(`\n  Pêche Port-Gentil — serveur démarré sur le port ${PORT}`);
+    console.log(`  Comptes : admin + pecheur (mots de passe définis dans la config)`);
+    console.log(`  NEMO : ${nemoConfigured() ? "configuré" : "non configuré (import manuel)"}\n`);
+    startProximityWatcher(); // alerte "pirogue proche du débarquement" — no-op tant que NEMO n'est pas configuré
+  });
+}

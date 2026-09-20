@@ -65,6 +65,8 @@ const API = (() => {
     entreprises: () => req("GET", "/api/entreprises"),
     setEntrepriseStatut: (id, statut) => req("POST", `/api/entreprises/${id}/statut`, { statut }),
     verifierEntreprise: (id) => req("POST", `/api/entreprises/${id}/verifier`),
+    entreprisePirogues: (entId) => req("GET", `/api/entreprises/${entId}/pirogues`),
+    setPirogueNemo: (entId, pirogueId, data) => req("PUT", `/api/entreprises/${entId}/pirogues/${pirogueId}/nemo`, data),
     pirogues: () => req("GET", "/api/pirogues"),
     addPirogue: (nom) => req("POST", "/api/pirogues", { nom }),
     delPirogue: (id) => req("DELETE", `/api/pirogues/${id}`),

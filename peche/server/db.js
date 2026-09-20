@@ -158,6 +158,12 @@ ensureColumn("tracks", "entreprise_id", "TEXT");
 ensureColumn("expenses", "entreprise_id", "TEXT");
 ensureColumn("pannes", "entreprise_id", "TEXT");
 
+// Config NEMO par pirogue (gérée par le super-admin, voir server/secrets.js
+// pour le chiffrement de nemo_api_key_enc — jamais stockée en clair).
+ensureColumn("pirogues", "nemo_api_url", "TEXT");
+ensureColumn("pirogues", "nemo_api_key_enc", "TEXT");
+ensureColumn("pirogues", "nemo_device_id", "TEXT");
+
 // --- Migration : rattacher les données existantes à une "entreprise n°1" ---
 // Au premier lancement de cette version, s'il n'y a aucune entreprise, on en
 // crée une et on y rattache TOUT l'existant. Rien n'est perdu, rien ne change
@@ -229,6 +235,7 @@ export const Pirogues = {
   one: db.prepare("SELECT * FROM pirogues WHERE id = ?"),
   insert: db.prepare("INSERT INTO pirogues (id, entreprise_id, nom, actif, created_at) VALUES (@id,@entreprise_id,@nom,@actif,@created_at)"),
   del: db.prepare("DELETE FROM pirogues WHERE id = ?"),
+  setNemoConfig: db.prepare("UPDATE pirogues SET nemo_api_url = ?, nemo_api_key_enc = ?, nemo_device_id = ? WHERE id = ?"),
 };
 
 export const Invitations = {
