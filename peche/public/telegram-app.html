@@ -7,34 +7,67 @@
 <link rel="icon" href="/logo.svg" type="image/svg+xml">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
+  /* Identité Fisher Link (voir public/style.css) : --lagoon est la couleur de
+     marque, reprise ici en dur (page autonome, pas de dépendance au CSS de
+     l'appli principale). Le thème Telegram (--tg-theme-*) sert de repli pour
+     le fond/texte, pour rester cohérent avec le mode clair/sombre du client
+     Telegram de la personne qui ouvre la Mini App. */
   :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 20px 16px; box-sizing: border-box;
+    margin: 0; padding: 20px 16px 32px; min-height: 100vh;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: var(--tg-theme-bg-color, #f4f6f5);
-    color: var(--tg-theme-text-color, #16211c);
+    background: var(--tg-theme-bg-color, #f5f5f7);
+    color: var(--tg-theme-text-color, #1d1d1f);
   }
-  h1 { font-size: 1.1rem; margin: 0 0 4px; }
-  p.lead { margin: 0 0 20px; color: var(--tg-theme-hint-color, #667b70); font-size: 0.9rem; }
-  input[type=file] { display: block; width: 100%; padding: 10px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .brand img { width: 34px; height: 34px; }
+  .brand span { font-weight: 700; font-size: 1.05rem; letter-spacing: -0.01em; color: #0d5c4a; }
+  h1 { font-size: 1.05rem; margin: 0 0 4px; font-weight: 600; }
+  p.lead { margin: 0 0 20px; color: var(--tg-theme-hint-color, #6e6e73); font-size: 0.88rem; }
+
+  .card {
+    background: var(--tg-theme-secondary-bg-color, #ffffff); border-radius: 14px;
+    padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    margin-bottom: 14px;
+  }
+  input[type=file] { display: block; width: 100%; padding: 8px 0; font-size: 0.92rem; }
   #preview img { max-width: 100%; border-radius: 10px; margin-top: 12px; display: block; }
+
   button {
-    width: 100%; margin-top: 16px; padding: 12px; border: none; border-radius: 10px;
-    background: var(--tg-theme-button-color, #1f7a4d); color: var(--tg-theme-button-text-color, #fff);
-    font-size: 1rem; font-weight: 600;
+    width: 100%; margin-top: 10px; padding: 12px; border: none; border-radius: 10px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
   }
-  button:disabled { opacity: 0.5; }
-  #status { margin-top: 14px; font-size: 0.9rem; color: var(--tg-theme-hint-color, #667b70); }
+  button.primary { background: #0d5c4a; color: #fff; }
+  button.ghost { background: transparent; color: #0d5c4a; border: 1px solid #0d5c4a33; }
+  button:disabled { opacity: 0.45; cursor: default; }
+
+  #identify-result { margin-top: 12px; padding: 12px; border-radius: 10px; background: #0d5c4a14; font-size: 0.88rem; display: none; }
+  #identify-result.show { display: block; }
+  #identify-result b { color: #0d5c4a; }
+  #identify-result .caveat { display: block; margin-top: 6px; color: var(--tg-theme-hint-color, #6e6e73); font-size: 0.8rem; }
+
+  #status { margin-top: 14px; font-size: 0.88rem; color: var(--tg-theme-hint-color, #6e6e73); text-align: center; }
   #status.err { color: #c0392b; }
-  #status.ok { color: #1f7a4d; }
+  #status.ok { color: #0d5c4a; font-weight: 600; }
 </style>
 </head>
 <body>
-  <h1>Envoyer une photo de capture</h1>
-  <p class="lead">La photo sera proposée dans Fisher Link à la prochaine saisie de ta sortie.</p>
-  <input type="file" id="photo" accept="image/*" capture="environment">
-  <div id="preview"></div>
-  <button id="send" disabled>Envoyer la photo</button>
+  <div class="brand"><img src="/logo.svg" alt=""><span>Fisher Link</span></div>
+
+  <div class="card">
+    <h1>Photo de capture</h1>
+    <p class="lead">Envoyée depuis le bateau, elle sera proposée dans Fisher Link à la prochaine saisie de ta sortie.</p>
+    <input type="file" id="photo" accept="image/*" capture="environment">
+    <div id="preview"></div>
+  </div>
+
+  <div class="card" id="identify-card" hidden>
+    <button class="ghost" id="identify-btn">🔎 Identifier l'espèce (bêta)</button>
+    <div id="identify-result"></div>
+  </div>
+
+  <button class="primary" id="send" disabled>Envoyer la photo</button>
   <p id="status"></p>
 
 <script>
@@ -46,11 +79,17 @@
   const preview = document.getElementById("preview");
   const sendBtn = document.getElementById("send");
   const status = document.getElementById("status");
+  const identifyCard = document.getElementById("identify-card");
+  const identifyBtn = document.getElementById("identify-btn");
+  const identifyResult = document.getElementById("identify-result");
   let pendingDataUrl = null;
 
   function setStatus(text, cls) {
     status.textContent = text || "";
     status.className = cls || "";
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
   if (!tg || !tg.initData) {
@@ -84,11 +123,39 @@
   fileInput.addEventListener("change", function (e) {
     const f = e.target.files[0]; if (!f) return;
     setStatus("");
+    identifyResult.className = ""; identifyResult.innerHTML = "";
     compressImage(f, function (dataUrl) {
       pendingDataUrl = dataUrl;
       preview.innerHTML = '<img src="' + dataUrl + '" alt="aperçu">';
       sendBtn.disabled = false;
+      identifyCard.hidden = false;
+      identifyBtn.disabled = false;
     });
+  });
+
+  identifyBtn.addEventListener("click", async function () {
+    if (!pendingDataUrl) return;
+    identifyBtn.disabled = true;
+    identifyResult.className = "show";
+    identifyResult.textContent = "Identification en cours…";
+    try {
+      const res = await fetch("/api/telegram/miniapp-identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData, photo: pendingDataUrl }),
+      });
+      const r = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(r.error || "Identification indisponible.");
+      const pct = Math.round((r.confiance || 0) * 100);
+      identifyResult.innerHTML =
+        "Espèce détectée : <b>" + esc(r.especeFr || r.espece) + "</b> (confiance " + pct + "%)" +
+        (r.poidsEstimeKg != null ? " — poids estimé : <b>" + esc(r.poidsEstimeKg) + " kg</b> par poisson" : "") +
+        '<span class="caveat">Poids typique par espèce (pas mesuré sur la photo) — à ajuster au moment de la saisie.</span>';
+    } catch (e) {
+      identifyResult.textContent = e.message;
+    } finally {
+      identifyBtn.disabled = false;
+    }
   });
 
   sendBtn.addEventListener("click", async function () {

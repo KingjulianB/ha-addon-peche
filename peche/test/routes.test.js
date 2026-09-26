@@ -625,6 +625,11 @@ describe("Telegram (non configuré dans ce test) + rattachement d'une photo en a
     assert.equal(r.status, 404);
   });
 
+  test("l'identification depuis la Mini App refuse tant que le bot n'est pas configuré", async () => {
+    const r = await api("POST", "/api/telegram/miniapp-identify", { body: { initData: "x", photo: "x" } });
+    assert.equal(r.status, 400);
+  });
+
   test("POST /api/trips avec un photoRef inconnu → 400", async () => {
     const r = await api("POST", "/api/trips", {
       token: ctx.tokenA,

@@ -1436,11 +1436,30 @@
           style="width:72px;height:72px;object-fit:cover;border-radius:var(--radius-sm);border:2px solid transparent;cursor:pointer">`).join("")}
       </div>`;
     box.querySelectorAll("img").forEach((img) => {
-      img.addEventListener("click", () => {
+      img.addEventListener("click", async () => {
         pendingPhotoRef = img.dataset.id; pendingPhoto = null; lastIdentification = null;
         box.querySelectorAll("img").forEach((i) => i.style.borderColor = "transparent");
         img.style.borderColor = "var(--lagoon)";
         el("s-photo-preview").innerHTML = `<img src="${img.src}" alt="aperçu" style="max-width:180px;border-radius:var(--radius-sm);border:1px solid var(--line)">`;
+        // pendingPhotoRef suffit pour enregistrer la sortie (la photo est déjà
+        // stockée côté serveur), mais identifyCatchPhoto() a besoin de l'image
+        // elle-même : on la retélécharge une fois en data URL pour réactiver
+        // l'identification automatique sur une photo reçue via Telegram.
+        const btn = el("s-identify-btn");
+        if (btn) btn.disabled = true;
+        try {
+          const blob = await (await fetch(img.src)).blob();
+          pendingPhoto = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          if (btn) { btn.disabled = false; el("s-identify-result").innerHTML = ""; }
+        } catch {
+          // Identification indisponible pour cette photo ; l'enregistrement de
+          // la sortie reste possible via pendingPhotoRef.
+        }
       });
     });
   }
@@ -1530,7 +1549,7 @@
       depart: el("s-dep").value, retour: el("s-ret").value,
       zone: el("s-zone").value.trim(), crew, prises,
       par: el("s-par").value.trim(), note: el("s-note").value.trim(),
-      photo: pendingPhoto, photoRef: pendingPhotoRef, gps: pendingGps,
+      photo: pendingPhotoRef ? null : pendingPhoto, photoRef: pendingPhotoRef, gps: pendingGps,
       identification: lastIdentification || null,
     };
     const btn = el("s-save"); btn.disabled = true; btn.textContent = "Enregistrement…";

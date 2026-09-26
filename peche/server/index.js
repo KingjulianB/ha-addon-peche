@@ -496,6 +496,30 @@ app.post("/api/telegram/miniapp-photo", async (req, res) => {
   res.json({ ok: true });
 });
 
+// Identification d'espèce depuis la Mini App, avant même d'envoyer la photo
+// (même modèle que POST /api/identify-photo, mais authentifié par initData
+// Telegram plutôt que par session). Nécessite aussi un compte lié : sert de
+// filtre anti-abus, pas seulement de confort.
+app.post("/api/telegram/miniapp-identify", async (req, res) => {
+  if (!telegramConfigured()) return res.status(400).json({ error: "Telegram non configuré." });
+  const { initData, photo } = req.body || {};
+  let tgUser;
+  try {
+    tgUser = verifyInitData(initData);
+  } catch (e) {
+    return res.status(401).json({ error: e.message });
+  }
+  const link = TelegramLinks.byChatId.get(String(tgUser.id));
+  if (!link) return res.status(403).json({ error: "Compte non lié." });
+  if (!photo) return res.status(400).json({ error: "Photo manquante." });
+  try {
+    const r = await identifyPhoto(photo);
+    res.json(r);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ---------- SORTIES ----------
 app.get("/api/trips", requireAuth, (req, res) => {
   // admin voit tout ; pêcheur ne voit que SES sorties
