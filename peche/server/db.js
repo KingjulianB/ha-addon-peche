@@ -142,6 +142,34 @@ CREATE TABLE IF NOT EXISTS invitations (
   created_at    INTEGER NOT NULL,
   used_at       INTEGER
 );
+-- Appairage d'un compte Fisher Link avec un chat Telegram (bot unique pour
+-- toute la plateforme ; l'isolation multi-tenant vient de entreprise_id).
+CREATE TABLE IF NOT EXISTS telegram_links (
+  chat_id       TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  entreprise_id TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
+-- Code court à usage unique généré dans l'appli, envoyé au bot via
+-- /start <code> pour prouver que le chat Telegram appartient bien au
+-- compte connecté (même logique que les codes d'invitation ci-dessus).
+CREATE TABLE IF NOT EXISTS telegram_pairing_codes (
+  code          TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL,
+  entreprise_id TEXT NOT NULL,
+  created_at    INTEGER NOT NULL,
+  used_at       INTEGER
+);
+-- Photos reçues par le bot avant qu'une sortie n'existe encore côté appli :
+-- proposées comme suggestions dans le formulaire de saisie, puis supprimées
+-- de cette table dès qu'elles sont rattachées à une sortie (ou écartées).
+CREATE TABLE IF NOT EXISTS pending_photos (
+  id            TEXT PRIMARY KEY,
+  entreprise_id TEXT NOT NULL,
+  user_id       TEXT NOT NULL,
+  photo_ref     TEXT NOT NULL,
+  created_at    INTEGER NOT NULL
+);
 `);
 
 // entreprise_id sur toutes les tables de données + les comptes
@@ -244,6 +272,26 @@ export const Invitations = {
   insert: db.prepare("INSERT INTO invitations (code, entreprise_id, role, utilise, created_at, used_at) VALUES (@code,@entreprise_id,@role,0,@created_at,NULL)"),
   markUsed: db.prepare("UPDATE invitations SET utilise = 1, used_at = ? WHERE code = ?"),
   del: db.prepare("DELETE FROM invitations WHERE code = ?"),
+};
+
+export const TelegramLinks = {
+  byChatId: db.prepare("SELECT * FROM telegram_links WHERE chat_id = ?"),
+  byUser: db.prepare("SELECT * FROM telegram_links WHERE user_id = ?"),
+  insert: db.prepare("INSERT OR REPLACE INTO telegram_links (chat_id, user_id, entreprise_id, created_at) VALUES (@chat_id,@user_id,@entreprise_id,@created_at)"),
+  delByUser: db.prepare("DELETE FROM telegram_links WHERE user_id = ?"),
+};
+
+export const TelegramPairingCodes = {
+  byCode: db.prepare("SELECT * FROM telegram_pairing_codes WHERE code = ?"),
+  insert: db.prepare("INSERT INTO telegram_pairing_codes (code, user_id, entreprise_id, created_at, used_at) VALUES (@code,@user_id,@entreprise_id,@created_at,NULL)"),
+  markUsed: db.prepare("UPDATE telegram_pairing_codes SET used_at = ? WHERE code = ?"),
+};
+
+export const PendingPhotos = {
+  byUser: db.prepare("SELECT * FROM pending_photos WHERE user_id = ? AND entreprise_id = ? ORDER BY created_at DESC"),
+  one: db.prepare("SELECT * FROM pending_photos WHERE id = ? AND user_id = ?"),
+  insert: db.prepare("INSERT INTO pending_photos (id, entreprise_id, user_id, photo_ref, created_at) VALUES (@id,@entreprise_id,@user_id,@photo_ref,@created_at)"),
+  del: db.prepare("DELETE FROM pending_photos WHERE id = ? AND user_id = ?"),
 };
 
 // Renvoie l'id de l'entreprise par défaut (celle qui contient tes données

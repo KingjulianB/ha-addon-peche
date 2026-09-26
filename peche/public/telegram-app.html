@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fisher Link — Photo</title>
+<link rel="icon" href="/logo.svg" type="image/svg+xml">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0; padding: 20px 16px; box-sizing: border-box;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--tg-theme-bg-color, #f4f6f5);
+    color: var(--tg-theme-text-color, #16211c);
+  }
+  h1 { font-size: 1.1rem; margin: 0 0 4px; }
+  p.lead { margin: 0 0 20px; color: var(--tg-theme-hint-color, #667b70); font-size: 0.9rem; }
+  input[type=file] { display: block; width: 100%; padding: 10px 0; }
+  #preview img { max-width: 100%; border-radius: 10px; margin-top: 12px; display: block; }
+  button {
+    width: 100%; margin-top: 16px; padding: 12px; border: none; border-radius: 10px;
+    background: var(--tg-theme-button-color, #1f7a4d); color: var(--tg-theme-button-text-color, #fff);
+    font-size: 1rem; font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; }
+  #status { margin-top: 14px; font-size: 0.9rem; color: var(--tg-theme-hint-color, #667b70); }
+  #status.err { color: #c0392b; }
+  #status.ok { color: #1f7a4d; }
+</style>
+</head>
+<body>
+  <h1>Envoyer une photo de capture</h1>
+  <p class="lead">La photo sera proposée dans Fisher Link à la prochaine saisie de ta sortie.</p>
+  <input type="file" id="photo" accept="image/*" capture="environment">
+  <div id="preview"></div>
+  <button id="send" disabled>Envoyer la photo</button>
+  <p id="status"></p>
+
+<script>
+(function () {
+  const tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  const fileInput = document.getElementById("photo");
+  const preview = document.getElementById("preview");
+  const sendBtn = document.getElementById("send");
+  const status = document.getElementById("status");
+  let pendingDataUrl = null;
+
+  function setStatus(text, cls) {
+    status.textContent = text || "";
+    status.className = cls || "";
+  }
+
+  if (!tg || !tg.initData) {
+    setStatus("À ouvrir depuis le bot Telegram Fisher Link (bouton \"Envoyer une photo\").", "err");
+    fileInput.disabled = true;
+  }
+
+  // Même compression que le formulaire principal (public/js/app.js) : évite
+  // de saturer le stockage avec des photos de smartphone à pleine résolution.
+  function compressImage(file, cb) {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = function () {
+      img.onload = function () {
+        const max = 1280;
+        let width = img.width, height = img.height;
+        if (width > max || height > max) {
+          const r = Math.min(max / width, max / height);
+          width = Math.round(width * r); height = Math.round(height * r);
+        }
+        const c = document.createElement("canvas");
+        c.width = width; c.height = height;
+        c.getContext("2d").drawImage(img, 0, 0, width, height);
+        cb(c.toDataURL("image/jpeg", 0.7));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  fileInput.addEventListener("change", function (e) {
+    const f = e.target.files[0]; if (!f) return;
+    setStatus("");
+    compressImage(f, function (dataUrl) {
+      pendingDataUrl = dataUrl;
+      preview.innerHTML = '<img src="' + dataUrl + '" alt="aperçu">';
+      sendBtn.disabled = false;
+    });
+  });
+
+  sendBtn.addEventListener("click", async function () {
+    if (!pendingDataUrl) return;
+    sendBtn.disabled = true;
+    setStatus("Envoi en cours…");
+    try {
+      const res = await fetch("/api/telegram/miniapp-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ initData: tg.initData, photo: pendingDataUrl }),
+      });
+      const data = await res.json().catch(function () { return {}; });
+      if (!res.ok) throw new Error(data.error || "Échec de l'envoi.");
+      setStatus("Photo envoyée ✅ Tu peux fermer cette fenêtre.", "ok");
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+      setTimeout(function () { if (tg) tg.close(); }, 1200);
+    } catch (e) {
+      setStatus(e.message, "err");
+      sendBtn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

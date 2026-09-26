@@ -25,6 +25,7 @@ process.env.APP_BASE_URL = "";
 process.env.SMTP_HOST = ""; process.env.SMTP_USER = ""; process.env.SMTP_PASSWORD = "";
 process.env.NEXTCLOUD_URL = ""; process.env.NEXTCLOUD_USER = ""; process.env.NEXTCLOUD_PASSWORD = "";
 process.env.NEMO_API_URL = ""; process.env.NEMO_API_KEY = ""; process.env.NEMO_DEVICE_ID = "";
+process.env.TELEGRAM_BOT_TOKEN = ""; process.env.TELEGRAM_BOT_USERNAME = ""; process.env.TELEGRAM_WEBHOOK_SECRET = "";
 
 const { default: app } = await import("../server/index.js");
 const { db } = await import("../server/db.js");
@@ -604,6 +605,47 @@ describe("vérification d'email et réinitialisation de mot de passe", () => {
     assert.equal(r.status, 200);
     assert.equal(r.json.ok, true);
     assert.equal(r.json.lien_reinitialisation, undefined);
+  });
+});
+
+describe("Telegram (non configuré dans ce test) + rattachement d'une photo en attente", () => {
+  test("/api/telegram/status reflète l'absence de configuration", async () => {
+    const r = await api("GET", "/api/telegram/status", { token: ctx.tokenA });
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json, { configured: false, botUsername: "", linked: false });
+  });
+
+  test("/api/telegram/pairing-code refuse tant que le bot n'est pas configuré", async () => {
+    const r = await api("POST", "/api/telegram/pairing-code", { token: ctx.tokenA });
+    assert.equal(r.status, 400);
+  });
+
+  test("le webhook répond 404 tant que le bot n'est pas configuré", async () => {
+    const r = await api("POST", "/api/telegram/webhook", { body: { message: {} } });
+    assert.equal(r.status, 404);
+  });
+
+  test("POST /api/trips avec un photoRef inconnu → 400", async () => {
+    const r = await api("POST", "/api/trips", {
+      token: ctx.tokenA,
+      body: { arrivee_date: "2026-02-01", prises: [{ esp: "Bar", kg: 2, prix: 1000 }], photoRef: "inconnu" },
+    });
+    assert.equal(r.status, 400);
+  });
+
+  test("POST /api/trips avec un photoRef valide consomme la photo en attente", async () => {
+    const { Users, PendingPhotos } = await import("../server/db.js");
+    const admin = Users.byEmail.get(ADMIN_EMAIL);
+    const pendingId = "pp-test-1";
+    PendingPhotos.insert.run({ id: pendingId, entreprise_id: admin.entreprise_id, user_id: admin.id, photo_ref: "commun__deja-stockee.jpg", created_at: Date.now() });
+
+    const r = await api("POST", "/api/trips", {
+      token: ctx.tokenA,
+      body: { arrivee_date: "2026-02-01", prises: [{ esp: "Bar", kg: 2, prix: 1000 }], photoRef: pendingId },
+    });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.photo, "commun__deja-stockee.jpg");
+    assert.equal(PendingPhotos.one.get(pendingId, admin.id), undefined); // consommée, pas réutilisable
   });
 });
 

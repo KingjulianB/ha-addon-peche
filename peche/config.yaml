@@ -1,5 +1,5 @@
 name: Fisher Link
-version: "2.5.3"
+version: "2.6.0"
 slug: peche
 description: Fisher Link — journal de bord, traçabilité et gestion de pêche multi-entreprises
 url: https://github.com/KingjulianB/ha-addon-peche
@@ -24,6 +24,9 @@ options:
   nextcloud_user: ""
   nextcloud_password: ""
   nextcloud_folder: CarnetPeche
+  telegram_bot_token: ""
+  telegram_bot_username: ""
+  telegram_webhook_secret: ""
   smtp_host: ""
   smtp_port: "587"
   smtp_user: ""
@@ -42,6 +45,9 @@ schema:
   nextcloud_user: str?
   nextcloud_password: password?
   nextcloud_folder: str?
+  telegram_bot_token: password?
+  telegram_bot_username: str?
+  telegram_webhook_secret: password?
   smtp_host: str?
   smtp_port: str?
   smtp_user: str?

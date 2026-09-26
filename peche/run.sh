@@ -16,6 +16,10 @@ export NEXTCLOUD_USER="$(bashio::config 'nextcloud_user')"
 export NEXTCLOUD_PASSWORD="$(bashio::config 'nextcloud_password')"
 export NEXTCLOUD_FOLDER="$(bashio::config 'nextcloud_folder')"
 
+export TELEGRAM_BOT_TOKEN="$(bashio::config 'telegram_bot_token')"
+export TELEGRAM_BOT_USERNAME="$(bashio::config 'telegram_bot_username')"
+export TELEGRAM_WEBHOOK_SECRET="$(bashio::config 'telegram_webhook_secret')"
+
 export SMTP_HOST="$(bashio::config 'smtp_host')"
 export SMTP_PORT="$(bashio::config 'smtp_port')"
 export SMTP_USER="$(bashio::config 'smtp_user')"

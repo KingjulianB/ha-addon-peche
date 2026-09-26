@@ -111,6 +111,12 @@ const API = (() => {
     updatePanne: (id, p) => req("PUT", `/api/pannes/${id}`, p),
     delPanne: (id) => req("DELETE", `/api/pannes/${id}`),
 
+    telegramStatus: () => req("GET", "/api/telegram/status"),
+    telegramPairingCode: () => req("POST", "/api/telegram/pairing-code"),
+    telegramUnlink: () => req("DELETE", "/api/telegram/link"),
+    telegramPendingPhotos: () => req("GET", "/api/telegram/pending-photos"),
+    telegramDismissPhoto: (id) => req("DELETE", `/api/telegram/pending-photos/${id}`),
+
     // Pour les images : on ne peut pas mettre d'en-tête sur une balise <img>,
     // donc on expose le token en query pour l'URL des photos.
     photoUrl: (ref) => {

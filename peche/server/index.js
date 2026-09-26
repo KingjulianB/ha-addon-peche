@@ -4,13 +4,14 @@ import { dirname, join, extname } from "node:path";
 import { randomUUID, randomInt } from "node:crypto";
 import { mkdirSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 
-import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, TrainingFeedback, defaultEntrepriseId, db } from "./db.js";
+import { Trips, Tracks, Settings, getSettings, Users, Expenses, Pannes, Entreprises, Pirogues, Invitations, TrainingFeedback, TelegramLinks, TelegramPairingCodes, PendingPhotos, defaultEntrepriseId, db } from "./db.js";
 import { trackDistanceKm, trackDurationH } from "./geo.js";
 import { nemoConfigured, fetchNemoTrack } from "./nemo.js";
 import { startProximityWatcher } from "./proximity-alert.js";
 import { fishIdConfigured, identifyPhoto, estimateWeightFromLength } from "./fishid.js";
 import { nextcloudConfigured, uploadPhoto, downloadPhoto } from "./nextcloud.js";
 import { encryptSecret } from "./secrets.js";
+import { telegramConfigured, telegramBotUsername, WEBHOOK_SECRET as TELEGRAM_WEBHOOK_SECRET, setWebhook, sendMessage, downloadTelegramPhoto, verifyInitData } from "./telegram.js";
 import {
   ensureAdminAccount, createUser, verifyPassword, createSession, getSession, destroySession, hashPassword,
   createResetToken, resetPasswordWithToken, DUMMY_PASSWORD_HASH, createPhotoToken, getPhotoSession,
@@ -49,6 +50,14 @@ if (process.env.ENTREPRISE_NOM) {
 // Compte admin de TON entreprise (connexion par email)
 if (ADMIN_EMAIL && ADMIN_PASSWORD) {
   ensureAdminAccount({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD });
+}
+
+// Bot Telegram : enregistre le webhook au démarrage si un token et une URL
+// publique sont configurés (sinon les pêcheurs devront le faire manuellement
+// une fois APP_BASE_URL renseigné).
+if (telegramConfigured() && process.env.APP_BASE_URL) {
+  setWebhook(`${process.env.APP_BASE_URL.replace(/\/+$/, "")}/api/telegram/webhook`)
+    .catch((e) => console.warn("Webhook Telegram non enregistré :", e.message));
 }
 
 app.use(express.json({ limit: "12mb" })); // 12mb pour accepter une photo en base64
@@ -364,6 +373,129 @@ app.post("/api/join", authRateLimit, (req, res) => {
   res.json({ ok: true, entreprise: ent.nom });
 });
 
+// ---------- TELEGRAM (photos envoyées depuis le bateau) ----------
+// Un pêcheur lie son compte en générant un code ici, puis en l'envoyant au
+// bot via /start <code>. Il peut ensuite soit envoyer une photo directement
+// au bot (message), soit ouvrir la Mini App dédiée (bouton web_app) qui
+// prend la photo dans un petit formulaire propre à Telegram. Dans les deux
+// cas la photo atterrit dans pending_photos, proposée comme suggestion au
+// moment de la saisie (POST /api/trips accepte alors photoRef, voir plus haut).
+function telegramMiniAppUrl() {
+  const base = (process.env.APP_BASE_URL || "").replace(/\/+$/, "");
+  return base ? `${base}/telegram-app.html` : null;
+}
+function miniAppKeyboard() {
+  const url = telegramMiniAppUrl();
+  if (!url) return undefined;
+  return { inline_keyboard: [[{ text: "📷 Envoyer une photo", web_app: { url } }]] };
+}
+app.get("/api/telegram/status", requireAuth, (req, res) => {
+  res.json({
+    configured: telegramConfigured(),
+    botUsername: telegramBotUsername(),
+    linked: Boolean(TelegramLinks.byUser.get(req.user.id)),
+  });
+});
+app.post("/api/telegram/pairing-code", requireAuth, (req, res) => {
+  if (!telegramConfigured()) return res.status(400).json({ error: "Telegram non configuré." });
+  let code;
+  do { code = genCode(); } while (TelegramPairingCodes.byCode.get(code));
+  TelegramPairingCodes.insert.run({ code, user_id: req.user.id, entreprise_id: entOf(req), created_at: Date.now() });
+  res.json({ code });
+});
+app.delete("/api/telegram/link", requireAuth, (req, res) => {
+  TelegramLinks.delByUser.run(req.user.id);
+  res.json({ ok: true });
+});
+app.get("/api/telegram/pending-photos", requireAuth, (req, res) => {
+  res.json(PendingPhotos.byUser.all(req.user.id, entOf(req)));
+});
+app.delete("/api/telegram/pending-photos/:id", requireAuth, (req, res) => {
+  PendingPhotos.del.run(req.params.id, req.user.id);
+  res.json({ ok: true });
+});
+
+// Reçoit les mises à jour du bot Telegram. Pas de session ici (Telegram, pas
+// un navigateur) : on vérifie un secret partagé à la place.
+app.post("/api/telegram/webhook", async (req, res) => {
+  if (!telegramConfigured()) return res.status(404).end();
+  if (TELEGRAM_WEBHOOK_SECRET && req.get("x-telegram-bot-api-secret-token") !== TELEGRAM_WEBHOOK_SECRET) {
+    return res.status(401).end();
+  }
+  // Répond tout de suite : Telegram réessaie l'appel si la réponse tarde.
+  res.json({ ok: true });
+
+  const msg = req.body?.message;
+  if (!msg || !msg.chat) return;
+  const chatId = String(msg.chat.id);
+  try {
+    if (typeof msg.text === "string" && msg.text.startsWith("/start")) {
+      const code = (msg.text.split(" ")[1] || "").trim().toUpperCase();
+      const pairing = code && TelegramPairingCodes.byCode.get(code);
+      if (!pairing || pairing.used_at) {
+        await sendMessage(chatId, "Code invalide ou déjà utilisé. Génère un nouveau code depuis Fisher Link (Réglages → Lier Telegram).");
+        return;
+      }
+      TelegramLinks.insert.run({ chat_id: chatId, user_id: pairing.user_id, entreprise_id: pairing.entreprise_id, created_at: Date.now() });
+      TelegramPairingCodes.markUsed.run(Date.now(), code);
+      await sendMessage(chatId,
+        "Compte Fisher Link lié ✅ Envoie tes photos de capture directement ici, ou utilise le bouton pour ouvrir la Mini App photo.",
+        { reply_markup: miniAppKeyboard() });
+      return;
+    }
+    if (typeof msg.text === "string" && msg.text.startsWith("/photo")) {
+      const link = TelegramLinks.byChatId.get(chatId);
+      if (!link) {
+        await sendMessage(chatId, "Compte non lié. Envoie /start <code> avec le code généré dans Fisher Link (Réglages → Lier Telegram).");
+        return;
+      }
+      const kb = miniAppKeyboard();
+      await sendMessage(chatId, kb ? "Ouvre la Mini App pour envoyer une photo :" : "Envoie directement ta photo ici en message.", { reply_markup: kb });
+      return;
+    }
+    if (Array.isArray(msg.photo) && msg.photo.length) {
+      const link = TelegramLinks.byChatId.get(chatId);
+      if (!link) {
+        await sendMessage(chatId, "Compte non lié. Envoie /start <code> avec le code généré dans Fisher Link (Réglages → Lier Telegram).");
+        return;
+      }
+      const best = msg.photo[msg.photo.length - 1]; // Telegram trie du plus petit au plus grand format
+      const { buffer, mime, ext } = await downloadTelegramPhoto(best.file_id);
+      const photoRef = await savePhotoBuffer(buffer, ext, mime, link.entreprise_id);
+      PendingPhotos.insert.run({ id: randomUUID(), entreprise_id: link.entreprise_id, user_id: link.user_id, photo_ref: photoRef, created_at: Date.now() });
+      await sendMessage(chatId, "Photo reçue 📸 Elle apparaîtra dans le formulaire de saisie de ta sortie.");
+    }
+  } catch (e) {
+    console.warn("Erreur webhook Telegram :", e.message);
+  }
+});
+
+// Envoi de photo depuis la Mini App Telegram dédiée (public/telegram-app.html).
+// Pas de session Fisher Link ici : l'identité vient du initData signé par
+// Telegram, vérifié côté serveur (voir telegram.js). Le compte doit déjà
+// avoir été lié via /start <code> (même table telegram_links que le bot).
+app.post("/api/telegram/miniapp-photo", async (req, res) => {
+  if (!telegramConfigured()) return res.status(400).json({ error: "Telegram non configuré." });
+  const { initData, photo } = req.body || {};
+  let tgUser;
+  try {
+    tgUser = verifyInitData(initData);
+  } catch (e) {
+    return res.status(401).json({ error: e.message });
+  }
+  const link = TelegramLinks.byChatId.get(String(tgUser.id));
+  if (!link) return res.status(403).json({ error: "Compte non lié. Lie ton compte Telegram depuis Fisher Link (Réglages) puis réessaie." });
+  if (!photo) return res.status(400).json({ error: "Photo manquante." });
+  let photoRef;
+  try {
+    photoRef = await savePhoto(photo, link.entreprise_id);
+  } catch (e) {
+    return res.status(400).json({ error: "Photo invalide : " + e.message });
+  }
+  PendingPhotos.insert.run({ id: randomUUID(), entreprise_id: link.entreprise_id, user_id: link.user_id, photo_ref: photoRef, created_at: Date.now() });
+  res.json({ ok: true });
+});
+
 // ---------- SORTIES ----------
 app.get("/api/trips", requireAuth, (req, res) => {
   // admin voit tout ; pêcheur ne voit que SES sorties
@@ -382,15 +514,23 @@ app.post("/api/trips", requireAuth, async (req, res) => {
   if (!arrivee || !Array.isArray(b.prises) || !b.prises.length) {
     return res.status(400).json({ error: "Date de débarquement et au moins une capture sont requises." });
   }
-  if (!b.photo) {
-    return res.status(400).json({ error: "La photo des poissons est obligatoire." });
-  }
-  // Enregistre la photo : Nextcloud si configuré et joignable, sinon local.
+  // Enregistre la photo : soit un nouvel envoi (Nextcloud si configuré et
+  // joignable, sinon local), soit une photo déjà reçue via Telegram et
+  // encore en attente de rattachement (voir §TELEGRAM plus bas).
   let photoRef = null;
-  try {
-    photoRef = await savePhoto(b.photo, entOf(req));
-  } catch (e) {
-    return res.status(400).json({ error: "Photo invalide : " + e.message });
+  if (b.photoRef) {
+    const pending = PendingPhotos.one.get(b.photoRef, req.user.id);
+    if (!pending) return res.status(400).json({ error: "Photo en attente introuvable." });
+    photoRef = pending.photo_ref;
+    PendingPhotos.del.run(pending.id, req.user.id);
+  } else if (b.photo) {
+    try {
+      photoRef = await savePhoto(b.photo, entOf(req));
+    } catch (e) {
+      return res.status(400).json({ error: "Photo invalide : " + e.message });
+    }
+  } else {
+    return res.status(400).json({ error: "La photo des poissons est obligatoire." });
   }
   const row = {
     id: randomUUID(),
@@ -842,6 +982,11 @@ async function savePhoto(dataUrl, entrepriseId) {
   const ext = m[1].toLowerCase().replace("jpeg", "jpg");
   const mime = `image/${ext === "jpg" ? "jpeg" : ext}`;
   const buf = Buffer.from(m[2], "base64");
+  return savePhotoBuffer(buf, ext, mime, entrepriseId);
+}
+// Cœur du stockage, partagé par savePhoto() (data URL, formulaire web) et le
+// webhook Telegram (buffer déjà décodé, pas de data URL à parser deux fois).
+async function savePhotoBuffer(buf, ext, mime, entrepriseId) {
   if (buf.length > 8 * 1024 * 1024) throw new Error("image trop lourde (max 8 Mo)");
   const name = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
   // sous-dossier = entreprise (isolation) ; on nettoie l'id pour un chemin sûr

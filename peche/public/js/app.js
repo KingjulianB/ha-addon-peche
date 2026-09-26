@@ -250,11 +250,13 @@
   // d'erreur réseau (on affiche l'appli quand même et on réessaiera).
   async function boot(fromLogin) {
     try {
-      const [trips, tracks, settings, nemo, fishId] = await Promise.all([
+      const [trips, tracks, settings, nemo, fishId, telegram] = await Promise.all([
         API.trips(), API.tracks(), API.settings(), API.nemoStatus().catch(() => ({ configured: false })),
         API.identifyPhotoStatus().catch(() => ({ configured: false })),
+        API.telegramStatus().catch(() => ({ configured: false, linked: false, botUsername: "" })),
       ]);
       state.trips = trips; state.tracks = tracks; state.settings = settings; state.nemo = nemo.configured; state.fishId = fishId.configured;
+      state.telegram = telegram;
       if (tracks[0]) state.curTrack = await API.track(tracks[0].id);
       applyRoleUI();
       renderHead();
@@ -1308,13 +1310,14 @@
   }
 
   /* ================= SAISIE ================= */
-  let pendingPhoto = null; // data URL de la photo choisie
+  let pendingPhoto = null;    // data URL de la photo choisie (upload direct)
+  let pendingPhotoRef = null; // id pending_photos si une photo Telegram est choisie à la place
   let pendingGps = null;   // {lat, lon} capturé
   let lastIdentification = null; // dernière proposition de identifyCatchPhoto(), pour la boucle de correction
 
   function renderSaisie(v) {
     const crew = safeArr(state.settings.crew);
-    pendingPhoto = null; pendingGps = null; lastIdentification = null;
+    pendingPhoto = null; pendingPhotoRef = null; pendingGps = null; lastIdentification = null;
     v.innerHTML = `
       <div class="form">
         <h2 class="fr">Nouveau débarquement</h2>
@@ -1342,6 +1345,7 @@
 
         <div class="divider"></div>
         <label>Photo des poissons (obligatoire)</label>
+        <div id="s-telegram-photos"></div>
         <input type="file" id="s-photo" accept="image/*" capture="environment" style="padding:0;border:none;background:none">
         <div id="s-photo-preview" style="margin-top:10px"></div>
         ${state.fishId ? `
@@ -1384,13 +1388,16 @@
     el("s-photo").addEventListener("change", (e) => {
       const f = e.target.files[0]; if (!f) return;
       compressImage(f, (dataUrl) => {
-        pendingPhoto = dataUrl;
+        pendingPhoto = dataUrl; pendingPhotoRef = null;
         lastIdentification = null; // nouvelle photo : l'ancienne proposition ne s'applique plus
         el("s-photo-preview").innerHTML = `<img src="${dataUrl}" alt="aperçu" style="max-width:180px;border-radius:var(--radius-sm);border:1px solid var(--line)">`;
         const btn = el("s-identify-btn");
         if (btn) { btn.disabled = false; el("s-identify-result").innerHTML = ""; }
       });
     });
+
+    // Photos reçues via Telegram (bot ou Mini App) en attente de rattachement.
+    loadTelegramPendingPhotos();
     if (state.fishId) el("s-identify-btn").addEventListener("click", identifyCatchPhoto);
 
     // GPS : capture automatique dès l'ouverture du formulaire, + bouton manuel
@@ -1412,6 +1419,30 @@
       (err) => { box.textContent = "Position refusée ou indisponible (" + err.message + ")."; },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
     );
+  }
+
+  // Propose les photos reçues via le bot/Mini App Telegram (voir server/index.js
+  // §TELEGRAM) comme suggestions, en plus de l'envoi direct depuis l'appareil.
+  async function loadTelegramPendingPhotos() {
+    if (!state.telegram || !state.telegram.configured) return;
+    const box = el("s-telegram-photos"); if (!box) return;
+    let photos;
+    try { photos = await API.telegramPendingPhotos(); } catch { return; }
+    if (!box.isConnected || !photos.length) return; // vue changée entre-temps, ou rien à montrer
+    box.innerHTML = `
+      <p class="hint" style="margin:0 0 8px">Photos reçues via Telegram — touchez-en une pour l'utiliser :</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        ${photos.map((p) => `<img data-id="${p.id}" src="${API.photoUrl(p.photo_ref)}" loading="lazy"
+          style="width:72px;height:72px;object-fit:cover;border-radius:var(--radius-sm);border:2px solid transparent;cursor:pointer">`).join("")}
+      </div>`;
+    box.querySelectorAll("img").forEach((img) => {
+      img.addEventListener("click", () => {
+        pendingPhotoRef = img.dataset.id; pendingPhoto = null; lastIdentification = null;
+        box.querySelectorAll("img").forEach((i) => i.style.borderColor = "transparent");
+        img.style.borderColor = "var(--lagoon)";
+        el("s-photo-preview").innerHTML = `<img src="${img.src}" alt="aperçu" style="max-width:180px;border-radius:var(--radius-sm);border:1px solid var(--line)">`;
+      });
+    });
   }
 
   // Compresse/redimensionne l'image côté navigateur (max 1280px, JPEG qualité 0.7)
@@ -1488,7 +1519,7 @@
     });
     const w = el("s-warn");
     if (!prises.length) { w.hidden = false; w.textContent = "Ajoutez au moins une capture (espèce + kg)."; return; }
-    if (!pendingPhoto) { w.hidden = false; w.textContent = "La photo des poissons est obligatoire."; return; }
+    if (!pendingPhoto && !pendingPhotoRef) { w.hidden = false; w.textContent = "La photo des poissons est obligatoire."; return; }
     const crew = []; document.querySelectorAll('#s-crew input:checked').forEach((c) => crew.push(c.dataset.n));
     const ddate = el("s-ddate").value || todayISO();
     const adate = el("s-adate").value || ddate;
@@ -1499,14 +1530,14 @@
       depart: el("s-dep").value, retour: el("s-ret").value,
       zone: el("s-zone").value.trim(), crew, prises,
       par: el("s-par").value.trim(), note: el("s-note").value.trim(),
-      photo: pendingPhoto, gps: pendingGps,
+      photo: pendingPhoto, photoRef: pendingPhotoRef, gps: pendingGps,
       identification: lastIdentification || null,
     };
     const btn = el("s-save"); btn.disabled = true; btn.textContent = "Enregistrement…";
     try {
       const saved = await API.addTrip(trip);
       state.trips.unshift(saved);
-      pendingPhoto = null; pendingGps = null; lastIdentification = null;
+      pendingPhoto = null; pendingPhotoRef = null; pendingGps = null; lastIdentification = null;
       toast("Débarquement enregistré");
       document.querySelector('.tab[data-tab="journal"]').click();
     } catch (e) { w.hidden = false; w.textContent = e.message; btn.disabled = false; btn.textContent = "Enregistrer le débarquement"; }
@@ -1557,8 +1588,16 @@
         <label>Équipage (un nom par ligne)</label>
         <textarea id="r-crew" rows="4" style="font-family:inherit">${safeArr(s.crew).map(esc).join("\n")}</textarea>
 
+        ${state.telegram && state.telegram.configured ? `
+        <div class="divider"></div>
+        <label>Photos par Telegram</label>
+        <p class="hint">Lie ton compte pour envoyer tes photos de capture depuis le bateau (message au bot ou Mini App dédiée) — elles seront proposées lors de la prochaine saisie.</p>
+        <div id="tg-box" class="info-badge">Chargement…</div>` : ""}
+
         <button class="btn" id="r-save">Enregistrer les réglages</button>
       </div>`;
+
+    if (state.telegram && state.telegram.configured) refreshTelegramBox();
 
     el("r-save").addEventListener("click", async () => {
       const crew = el("r-crew").value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
@@ -1578,4 +1617,29 @@
   }
 
   function safeArr(s) { try { const a = JSON.parse(s); return Array.isArray(a) ? a : []; } catch { return []; } }
+
+  // Affiche l'état de liaison Telegram + les actions (générer un code, délier).
+  async function refreshTelegramBox() {
+    const box = el("tg-box"); if (!box) return;
+    try { state.telegram = await API.telegramStatus(); } catch { /* on garde l'état connu précédent */ }
+    if (!box.isConnected) return; // l'utilisateur a changé d'onglet entre-temps
+    if (state.telegram.linked) {
+      box.innerHTML = `Compte Telegram lié ✅ <button class="btn ghost small" id="tg-unlink" style="margin-left:8px">Délier</button>`;
+      el("tg-unlink").addEventListener("click", async () => {
+        try { await API.telegramUnlink(); toast("Compte Telegram délié"); refreshTelegramBox(); } catch (e) { toast(e.message); }
+      });
+    } else {
+      box.innerHTML = `<button class="btn ghost small" id="tg-pair">Générer un code de liaison</button><div id="tg-pair-result" style="margin-top:10px"></div>`;
+      el("tg-pair").addEventListener("click", async () => {
+        try {
+          const { code } = await API.telegramPairingCode();
+          const link = state.telegram.botUsername ? `https://t.me/${encodeURIComponent(state.telegram.botUsername)}?start=${code}` : null;
+          el("tg-pair-result").innerHTML = link
+            ? `<a class="btn small" href="${link}" target="_blank" rel="noopener">Ouvrir Telegram et lier le compte</a>
+               <p class="hint" style="margin-top:6px">Ou envoie manuellement <b>/start ${code}</b> au bot.</p>`
+            : `<p class="hint">Envoie <b>/start ${code}</b> au bot Fisher Link sur Telegram.</p>`;
+        } catch (e) { toast(e.message); }
+      });
+    }
+  }
 })();
